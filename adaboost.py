@@ -507,7 +507,7 @@ class AdaBoost:
                     f"Direction: {'>' if best_direction == 1 else '<='}, Alpha: {alpha:.4f}"
                 )
 
-                if best_error == 0:
+                if np.abs(best_error) < 1e-10:
                     print(
                         f"\nPerfect feature found at stage {stage_i + 1}, iteration {x + 1}. "
                     )
@@ -516,7 +516,7 @@ class AdaBoost:
             # Append this stage to the full classifier's list of stages
             self.trained_classifier.append(stage_classifier)
 
-            if best_error == 0:
+            if np.abs(best_error) < 1e-10:
                 print("Stopping training early due to prefect feature.\n")
                 break  # Stop training if a perfect feature is found
 
@@ -561,7 +561,7 @@ if True:  # Set to True to run the test
 
     # Try a big dataset
     FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data(
-        size_x=5000, size_y=10000, bias_strenght=15
+        size_x=5000, size_y=10000, bias_strenght=40
     )
 
     print("Feature Evaluation Matrix:")
@@ -582,7 +582,7 @@ if True:  # Set to True to run the test
         feature_eval_matrix=FEATURE_EVAL_MATRIX,
         sample_weights=SAMPLE_WEIGHTS,
         sample_labels=SAMPLE_LABELS,
-        n_stages=5,
+        n_stages=6,
     )
 
     my_trainer.train()
