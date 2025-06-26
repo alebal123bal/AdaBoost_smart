@@ -71,7 +71,7 @@ def generate_random_data(size_x=5000, size_y=20000, bias_strenght=20):
     return _feature_eval_matrix, _sample_weights, _sample_labels
 
 
-## Pickel utils methods
+## Pickle utils methods
 def save_pickle_obj(obj, filename="trained_classifier.pkl"):
     """
     Save the classifier using pickle
@@ -121,32 +121,37 @@ class AdaBoost:
         feature_eval_matrix (numpy.ndarray): Matrix of feature evaluations.
         sample_weights (numpy.ndarray): Weights for each sample.
         sample_labels (numpy.ndarray): Labels for each sample.
+        n_stages (int, optional): Number of stages for the AdaBoost algorithm. Defaults to 5.
         """
+
         self.n_stages = n_stages
 
         print("Allocating memory for the AdaBoost classifier...")
         self.feature_eval_matrix = feature_eval_matrix
         self.sample_weights = np.array(sample_weights)
         self.sample_labels = np.array(sample_labels)
+        print("Done allocating memory for the AdaBoost classifier.\n")
 
         # Precomputed sorted indices for each feature evaluation
+        print("Precomputing sorted indices for feature evaluations...")
         self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1)
-
-        print("Done allocating memory for the AdaBoost classifier.\n")
+        print("Done precomputing sorted indices for feature evaluations.\n")
 
         self.trained_classifier = []  # Placeholder for the trained classifier
 
     ## Inference methods
     def majority_vote(self, sample_idx, stage_idx=0):
         """
-        Perform majority voting on the specified sample (could be image etc...).
-        Valid for a single stage only out of the many stages of the AdaBoost algorithm.
+        Perform majority voting on the specified sample index for the given stage.
 
         Args:
-            sample_idx (_type_): Index of the sample to perform majority voting on.
+            sample_idx (int): Index of the sample to evaluate.
+            stage_idx (int, optional): The index of the stage to evaluate. Defaults to 0.
+
         Returns:
-            int: The predicted label for the sample based on majority voting.
+            int: Predicted label for the sample based on the majority vote.
         """
+
         # Choose if using the non cropped data or the cropped one
         eval_matrix = self.feature_eval_matrix
         # Get the current stage of the trained classifier
@@ -180,18 +185,17 @@ class AdaBoost:
 
         return predicted_label
 
-    def get_predictions(self, stage_idx=0):
+    def get_predictions(self, stage_idx: int):
         """
         Test the classifier on all samples in the feature evaluation matrix.
         This method applies the majority voting for each sample and returns the predictions.
 
         Args:
-            stage_idx (int, optional): The index of the stage to test on. Defaults to 0.
+            stage_idx (int): The index of the stage to test on
 
         Returns:
-            numpy.ndarray: An array of predicted labels for all samples.
+            numpy.ndarray: An array of predicted labels for all samples
         """
-        # Choose if using the non cropped data or the cropped one
 
         # Get predictions
         predictions = np.array(
@@ -220,9 +224,6 @@ class AdaBoost:
             np.mean(predictions[self.sample_labels == -1] == -1) * 100,
             "%\n",
         )
-
-        if DEBUG:
-            print(predictions)
 
         return predictions
 
@@ -256,9 +257,6 @@ class AdaBoost:
         # Final predictions: 1 for positive samples, -1 for negative samples
         final_predictions = np.where(all_ones_mask, 1, -1)
 
-        if DEBUG:
-            print("Final cascade predictions:")
-            print(final_predictions)
         # Compare with original sample labels
         print(
             "Final percentage of correct predictions in cascade:",
@@ -272,6 +270,13 @@ class AdaBoost:
     def find_best_feature(self):
         """
         Find the best feature given the feature evaluation matrix, sample weights and labels.
+
+        Returns:
+            tuple: A tuple containing:
+                - best_idx (int): Index of the best feature.
+                - best_threshold (float): Best threshold for the feature.
+                - best_direction (int): Direction of the threshold (0 for "leq", 1 for "gt").
+                - alpha (float): Amount of say for the best feature.
         """
 
         # Best thresholds vector, one for each feature
@@ -296,11 +301,11 @@ class AdaBoost:
             unique_feature_eval, inverse_indices = np.unique(
                 feature_eval[ordered_idx], return_inverse=True
             )
-            # Merge the weights as well
+            # Merge the weights
             merged_weights = np.bincount(
                 inverse_indices, weights=ordered_signed_weights
             )
-            # Merge the labels as well
+            # Merge the labels
             merged_labels = np.bincount(
                 inverse_indices, weights=self.sample_labels[ordered_idx]
             )
@@ -319,7 +324,7 @@ class AdaBoost:
             # Compute the weighted error (greater than)
             weighted_errors_gt = 1 - weighted_errors_leq
 
-            # Find the index of the minimum weighted error
+            # Find the index of the minimum weighted error (lower equal to)
             min_error_leq_idx = np.argmin(weighted_errors_leq)
 
             # Find the index of the minimum weighted error (greater than)
@@ -336,46 +341,39 @@ class AdaBoost:
             min_error_gt = weighted_errors_gt[min_error_gt_idx]
 
             if min_error_leq < min_error_gt:
-                # If the minimum error is better for "lower equal to"
+                # Minimum error is better for "lower equal to"
                 best_thresholds[i] = threshold_leq
                 best_errors[i] = min_error_leq
                 best_directions[i] = 0
             else:
-                # If the minimum error is better for "greater than"
+                # Minimum error is better for "greater than"
                 best_thresholds[i] = threshold_gt
                 best_errors[i] = min_error_gt
                 best_directions[i] = 1
 
         # Outside the loop, find the best feature
         best_idx = np.argmin(best_errors)
+
         # Compute amount of say ("alpha")
         epsilon = np.max([1e-10, best_errors[best_idx]])
         alpha = 0.5 * np.log((1 - epsilon) / (epsilon))
-
-        if DEBUG:
-            # Print the threshold and the corresponding minimum weighted error
-            print(f"Best feature: index {best_idx}")
-            print(self.feature_eval_matrix[best_idx])
-            print("With threshold:")
-            print(best_thresholds[best_idx])
-            print("And direction (0 for lower equal to, 1 for greater than):")
-            print(best_directions[best_idx])
-            print("And minimum weighted error:")
-            print(best_errors[best_idx])
-            print("And alpha:")
-            print(alpha)
 
         return best_idx, best_thresholds[best_idx], best_directions[best_idx], alpha
 
     def find_weight_update_array(self, feature_idx, threshold, direction):
         """
-        Find the indexes of the samples that are classified incorrectly
-        based on the given feature index, threshold, and direction.
-        This array has the same length as the number of samples in the dataset.
-        It has a "1" for the samples that are classified incorrectly
-        and a "-1" for the samples that are classified correctly.
-        Useful for later steps in the AdaBoost algorithm.
+        Find the indexes of the samples that are classified incorrectly.
+        "+1" for incorrectly classified samples; "-1" for correctly classified samples.
+
+        Args:
+            feature_idx (int): Index of the feature to evaluate.
+            threshold (float): Threshold value for the feature evaluation.
+            direction (int): 0 for "lower than or equal to", 1 for "greater than".
+
+        Returns:
+            numpy.ndarray: "+1" for incorrect samples; "-1" for correct ones
         """
+
         # Get the feature evaluation for the given feature index
         feature_eval = self.feature_eval_matrix[feature_idx]
 
@@ -388,35 +386,35 @@ class AdaBoost:
             if direction == 0
             else (feature_eval > threshold)
         )
+
+        # Convert boolean indexes to -1 or 1
         prediction_indexes = prediction_indexes.astype(int) * 2 - 1
+
+        # Set the weight array to 1 for the samples that are classified incorrectly
         right_indexes = prediction_indexes == self.sample_labels
         weight_arr[right_indexes] = -1
-
-        if DEBUG:
-            print("Wrong indexes are those with +1 value:")
-            print(weight_arr)
-            print("Total mistakes:")
-            print(np.sum(weight_arr == 1))
 
         return weight_arr
 
     def weight_update(self, weight_update_array, alpha):
         """
-        Update the sample weights based on the weight update array and alpha.
-        This method updates the sample weights according to the AdaBoost algorithm.
+        Update and normalize sample weights according to the AdaBoost algorithm.
+
+        Args:
+            weight_update_array (numpy.ndarray): +1 for incorrect samples; -1 for correct ones
+            alpha (float): Amount of say
         """
         # Update the sample weights
         self.sample_weights *= np.exp(alpha * weight_update_array)
         # Normalize the sample weights
         self.sample_weights /= np.sum(self.sample_weights)
-        if DEBUG:
-            print("Updated sample weights:")
-            print(self.sample_weights)
-            print("\n")
 
     def crop_negatives(self, stage_idx):
         """
         Crop the negative samples based on this stage prediction.
+
+        Args:
+            stage_idx (int): Index of the stage to crop negatives from.
         """
 
         # Get this stage predictions
@@ -425,37 +423,35 @@ class AdaBoost:
         # Find the samples that are classified as positive (1) by the majority vote
         positive_samples = predictions == 1
 
-        # Remove the samples, weights and labels
-        # that are classified as negative by the majority vote
+        # Remove the samples, weights and labels classified as negative by the majority vote
         self.feature_eval_matrix = self.feature_eval_matrix[:, positive_samples]
         self.sample_weights = self.sample_weights[positive_samples]
         self.sample_labels = self.sample_labels[positive_samples]
-        self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1)
 
-        if DEBUG:
-            print(f"Cropping samples and weights at stage {stage_idx}...")
-            print(f"Samples and weights cropped at stage {stage_idx}.")
-            print("Remaining samples shape:", self.feature_eval_matrix.shape)
-            print("Remaining sample weights:", self.sample_weights)
+        # Sort again. TODO Is this necessary?
+        self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1)
 
     def train(self):
         """
         Train the AdaBoost classifier.
-        This method is currently a placeholder and does not implement the full training process.
         """
 
         for stage_i in range(self.n_stages):
+            print(f"Training stage {stage_i + 1} of {self.n_stages}...")
+
             stage_classifier = []  # Reset this stage's classifier
 
             for x in range(2 + 2 * stage_i):
-                print("Iteration:", x + 1)
-                # Find the best feature based on the feature evaluation matrix,
-                # sample weights, and labels
+                print(
+                    f"Finding best feature for stage {stage_i + 1}, iteration {x + 1}..."
+                )
+
+                # Find the best feature
                 best_idx, best_threshold, best_direction, alpha = (
                     self.find_best_feature()
                 )
 
-                # Get the weight update array based on the best feature found
+                # Get the weight-update array based on the best feature
                 weight_update_array = self.find_weight_update_array(
                     feature_idx=best_idx,
                     threshold=best_threshold,
@@ -478,6 +474,12 @@ class AdaBoost:
                     }
                 )
 
+                print(
+                    f"Stage {stage_i + 1}, iteration {x + 1} completed. "
+                    f"Feature index: {best_idx}, Threshold: {best_threshold}, "
+                    f"Direction: {'>' if best_direction == 1 else '<='}, Alpha: {alpha:.4f}"
+                )
+
             # Append this stage to the full classifier's list of stages
             self.trained_classifier.append(stage_classifier)
 
@@ -493,7 +495,7 @@ class AdaBoost:
 
 ## Test
 
-if False:  # Set to True to run the test
+if True:  # Set to True to run the test
     # Set the seed for reproducibility
     np.random.seed(42)
 
@@ -512,9 +514,9 @@ if False:  # Set to True to run the test
     SAMPLE_LABELS = np.array([1, -1, -1, 1, 1])
 
     # Try a big dataset
-    FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data(
-        size_x=5000, size_y=10000, bias_strenght=15
-    )
+    # FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data(
+    #     size_x=5000, size_y=10000, bias_strenght=15
+    # )
 
     print("Feature Evaluation Matrix:")
     print(FEATURE_EVAL_MATRIX)
@@ -534,7 +536,7 @@ if False:  # Set to True to run the test
         feature_eval_matrix=FEATURE_EVAL_MATRIX,
         sample_weights=SAMPLE_WEIGHTS,
         sample_labels=SAMPLE_LABELS,
-        n_stages=5,
+        n_stages=2,
     )
 
     my_trainer.train()
