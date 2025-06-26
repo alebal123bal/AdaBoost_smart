@@ -9,9 +9,6 @@ import time
 import pickle
 import numpy as np
 
-# Debug flag
-DEBUG = False
-
 
 ## Random generation methods
 def generate_random_data(size_x=5000, size_y=20000, bias_strenght=20):
@@ -537,14 +534,13 @@ class AdaBoost:
         )
 
 
-## Test
-
-if True:  # Set to True to run the test
+# Set to True to run the test
+TEST = True
+if TEST:
     # Set the seed for reproducibility
     np.random.seed(42)
 
-    # Each row is a specific feature.
-    # This row array contains the feature evaluation on each image.
+    # Each row is a specific feature containing the feature evaluations on each image.
     FEATURE_EVAL_MATRIX = np.array(
         [
             [5, 10, 2, -1, 3],
@@ -577,7 +573,6 @@ if True:  # Set to True to run the test
 
     start_time = time.time()
 
-    DEBUG = True
     my_trainer = AdaBoost(
         feature_eval_matrix=FEATURE_EVAL_MATRIX,
         sample_weights=SAMPLE_WEIGHTS,
