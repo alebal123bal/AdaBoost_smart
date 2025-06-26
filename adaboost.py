@@ -212,23 +212,6 @@ class AdaBoost:
             ]
         )
 
-        print(
-            f"Percentage of correct predictions at stage {stage_idx}:",
-            np.mean(predictions == self.sample_labels) * 100,
-            "%",
-        )
-        print(
-            f"True positive percentage at stage {stage_idx}:",
-            np.mean(predictions[self.sample_labels == 1] == 1) * 100,
-            "%",
-        )
-
-        print(
-            f"True negative percentage at stage {stage_idx}:",
-            np.mean(predictions[self.sample_labels == -1] == -1) * 100,
-            "%\n",
-        )
-
         return predictions
 
     def cascade_predictions(self, matrix, weights, labels):
@@ -442,6 +425,38 @@ class AdaBoost:
         # Sort again
         self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1)
 
+    def print_statistics(self, predictions, stage_idx):
+        """
+        Print statistics about the predictions at the given stage.
+
+        Args:
+            predictions (numpy.ndarray): Array of predictions for the current stage.
+            stage_idx (int): Index of the stage to print statistics for.
+        """
+
+        correct_predictions = np.mean(predictions == self.sample_labels) * 100
+        true_positives = np.mean(predictions[self.sample_labels == 1] == 1) * 100
+        true_negatives = np.mean(predictions[self.sample_labels == -1] == -1) * 100
+
+        print(f"\nStatistics for stage {stage_idx + 1}:\n")
+
+        print(
+            f"Percentage of correct predictions at stage {stage_idx}:",
+            correct_predictions,
+            "%",
+        )
+        print(
+            f"True positive percentage at stage {stage_idx}:",
+            true_positives,
+            "%",
+        )
+
+        print(
+            f"True negative percentage at stage {stage_idx}:",
+            true_negatives,
+            "%\n",
+        )
+
     def train(self):
         """
         Train the AdaBoost classifier.
@@ -494,22 +509,26 @@ class AdaBoost:
 
                 if best_error == 0:
                     print(
-                        f"Perfect feature found at stage {stage_i + 1}, iteration {x + 1}. "
+                        f"\nPerfect feature found at stage {stage_i + 1}, iteration {x + 1}. "
                     )
                     break  # Stop if a perfect feature is found
 
             # Append this stage to the full classifier's list of stages
             self.trained_classifier.append(stage_classifier)
 
+            if best_error == 0:
+                print("Stopping training early due to prefect feature.\n")
+                break  # Stop training if a perfect feature is found
+
             # Get this stage predictions
             predictions = self.get_predictions(stage_idx=stage_i)
 
+            # Print statistics for this stage
+            self.print_statistics(predictions=predictions, stage_idx=stage_i)
+
             # Remove the samples and weights that are classified as negative by the majority vote
             self.crop_negatives(predictions=predictions)
-
-            if best_error == 0:
-                print("Stopping training early due to prefect feature.")
-                break  # Stop training if a perfect feature is found
+            print("Cropped negatives from the feature evaluation matrix.\n")
 
         # Save the trained classifier to a file
         save_pickle_obj(
@@ -541,9 +560,9 @@ if True:  # Set to True to run the test
     SAMPLE_LABELS = np.array([1, -1, -1, 1, 1])
 
     # Try a big dataset
-    # FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data(
-    #     size_x=5000, size_y=10000, bias_strenght=15
-    # )
+    FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data(
+        size_x=5000, size_y=10000, bias_strenght=15
+    )
 
     print("Feature Evaluation Matrix:")
     print(FEATURE_EVAL_MATRIX)
