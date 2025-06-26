@@ -10,6 +10,37 @@ import pickle
 import numpy as np
 
 
+## Pickle utils methods
+def save_pickle_obj(obj, filename="trained_classifier.pkl"):
+    """
+    Save the classifier using pickle
+    """
+    with open(filename, "wb") as f:
+        pickle.dump(obj, f)
+    print(f"Object saved to {filename}")
+
+
+def load_pickle_obj(filename="trained_classifier.pkl"):
+    """
+    Load the classifier from a file using pickle.
+    If the file does not exist, it raises an error.
+    Returns:
+        classifier (object): The loaded classifier object.
+    """
+
+    try:
+        with open(filename, "rb") as f:
+            obj = pickle.load(f)
+
+        if obj is None:
+            raise ValueError(f"File '{filename}' is empty or corrupted.")
+
+        return obj
+
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"File '{filename}' not found.") from exc
+
+
 ## Random generation methods
 def generate_random_data(size_x=5000, size_y=20000, bias_strenght=20):
     """
@@ -66,37 +97,6 @@ def generate_random_data(size_x=5000, size_y=20000, bias_strenght=20):
     _sample_labels[positive_count:] = -1  # Make last 2/3 negative
 
     return _feature_eval_matrix, _sample_weights, _sample_labels
-
-
-## Pickle utils methods
-def save_pickle_obj(obj, filename="trained_classifier.pkl"):
-    """
-    Save the classifier using pickle
-    """
-    with open(filename, "wb") as f:
-        pickle.dump(obj, f)
-    print(f"Object saved to {filename}")
-
-
-def load_pickle_obj(filename="trained_classifier.pkl"):
-    """
-    Load the classifier from a file using pickle.
-    If the file does not exist, it raises an error.
-    Returns:
-        classifier (object): The loaded classifier object.
-    """
-
-    try:
-        with open(filename, "rb") as f:
-            obj = pickle.load(f)
-
-        if obj is None:
-            raise ValueError(f"File '{filename}' is empty or corrupted.")
-
-        return obj
-
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(f"File '{filename}' not found.") from exc
 
 
 class AdaBoost:
