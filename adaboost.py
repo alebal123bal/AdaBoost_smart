@@ -280,6 +280,7 @@ class AdaBoost:
                 - best_idx (int): Index of the best feature.
                 - best_threshold (float): Best threshold for the feature.
                 - best_direction (int): Direction of the threshold (0 for "leq", 1 for "gt").
+                - best_error (float): Weighted error of the best feature.
                 - alpha (float): Amount of say for the best feature.
         """
 
@@ -362,7 +363,13 @@ class AdaBoost:
         epsilon = np.max([1e-10, best_errors[best_idx]])
         alpha = 0.5 * np.log((1 - epsilon) / (epsilon))
 
-        return best_idx, best_thresholds[best_idx], best_directions[best_idx], alpha
+        return (
+            best_idx,
+            best_thresholds[best_idx],
+            best_directions[best_idx],
+            best_errors[best_idx],
+            alpha,
+        )
 
     def find_weight_update_array(self, feature_idx, threshold, direction):
         """
@@ -408,23 +415,21 @@ class AdaBoost:
             weight_update_array (numpy.ndarray): +1 for incorrect samples; -1 for correct ones
             alpha (float): Amount of say
         """
+
         # Update the sample weights
         self.sample_weights *= np.exp(alpha * weight_update_array)
         # Normalize the sample weights
         self.sample_weights /= np.sum(self.sample_weights)
 
-    def crop_negatives(self, stage_idx):
+    def crop_negatives(self, predictions):
         """
         Updates the feature evaluation matrix, sample weights and labels
         to only include the samples classified as positive.
         Sort the feature evaluation matrix again after cropping.
 
         Args:
-            stage_idx (int): Index of the stage to crop negatives from.
+            predictions (numpy.ndarray): Array of predictions for the current stage.
         """
-
-        # Get this stage predictions
-        predictions = self.get_predictions(stage_idx=stage_idx)
 
         # Find the samples that are classified as positive (1) by the majority vote
         positive_samples = predictions == 1
@@ -453,7 +458,7 @@ class AdaBoost:
                 )
 
                 # Find the best feature
-                best_feature_idx, best_threshold, best_direction, alpha = (
+                best_feature_idx, best_threshold, best_direction, best_error, alpha = (
                     self.find_best_feature()
                 )
 
@@ -476,6 +481,7 @@ class AdaBoost:
                         "feature_idx": best_feature_idx,
                         "threshold": best_threshold,
                         "direction": best_direction,
+                        "error": best_error,
                         "alpha": alpha,
                     }
                 )
@@ -486,11 +492,24 @@ class AdaBoost:
                     f"Direction: {'>' if best_direction == 1 else '<='}, Alpha: {alpha:.4f}"
                 )
 
+                if best_error == 0:
+                    print(
+                        f"Perfect feature found at stage {stage_i + 1}, iteration {x + 1}. "
+                    )
+                    break  # Stop if a perfect feature is found
+
             # Append this stage to the full classifier's list of stages
             self.trained_classifier.append(stage_classifier)
 
+            # Get this stage predictions
+            predictions = self.get_predictions(stage_idx=stage_i)
+
             # Remove the samples and weights that are classified as negative by the majority vote
-            self.crop_negatives(stage_idx=stage_i)
+            self.crop_negatives(predictions=predictions)
+
+            if best_error == 0:
+                print("Stopping training early due to prefect feature.")
+                break  # Stop training if a perfect feature is found
 
         # Save the trained classifier to a file
         save_pickle_obj(
@@ -544,7 +563,7 @@ if True:  # Set to True to run the test
         feature_eval_matrix=FEATURE_EVAL_MATRIX,
         sample_weights=SAMPLE_WEIGHTS,
         sample_labels=SAMPLE_LABELS,
-        n_stages=2,
+        n_stages=5,
     )
 
     my_trainer.train()
