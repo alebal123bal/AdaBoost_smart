@@ -246,17 +246,66 @@ Where `error_indicator` is +1 for misclassified samples and -1 for correct ones.
 ## Example Output
 
 ```
-Training stage 1 of 3...
+Feature Evaluation Matrix:
+[[ 5 10  2 -1  3]
+ [-3 -6  3 -2  6]
+ [10  9  4  0  9]
+ [-7  5 -2 10  6]]
+Sample Weights:
+[0.2  0.15 0.15 0.3  0.2 ]
+Sample Labels:
+[ 1 -1 -1  1  1]
+
+Training AdaBoost Classifier...
+
+Allocating memory for the AdaBoost classifier...
+Done allocating memory for the AdaBoost classifier.
+
+Precomputing sorted indices for feature evaluations...
+Done precomputing sorted indices for feature evaluations.
+
+Training stage 1 of 6...
 Finding best feature for stage 1, iteration 1...
 Stage 1, iteration 1 completed.
-Feature index: 2, Threshold: 4, Direction: >, Alpha: 0.4055, Error: 0.4
+Feature index: 0, Threshold: 5, Direction: <=, Alpha: 0.8673, Error: 0.14999999999999997
+Finding best feature for stage 1, iteration 2...
+Stage 1, iteration 2 completed.
+Feature index: 3, Threshold: 5, Direction: >, Alpha: 1.0075, Error: 0.11764705882352944
 
 Statistics for stage 1:
+
 Percentage of correct predictions at stage 0: 80.0 %
-True positive percentage at stage 0: 100.0 %
-True negative percentage at stage 0: 66.67 %
+True positive percentage at stage 0: 66.66666666666666 %
+True negative percentage at stage 0: 100.0 %
 
 Cropped negatives from the feature evaluation matrix.
+
+Training stage 2 of 6...
+Finding best feature for stage 2, iteration 1...
+Stage 2, iteration 1 completed.
+Feature index: 0, Threshold: 3, Direction: <=, Alpha: 0.1682, Error: 0.4166666666666667
+ror: 0.0
+Finding best feature for stage 2, iteration 3...
+Stage 2, iteration 3 completed.
+Feature index: 0, Threshold: 3, Direction: <=, Alpha: 11.5129, Error: 0.0
+Finding best feature for stage 2, iteration 4...
+Stage 2, iteration 4 completed.
+Feature index: 0, Threshold: 3, Direction: <=, Alpha: 11.5129, Error: 0.0
+
+Statistics for stage 2:
+
+Percentage of correct predictions at stage 1: 100.0 %
+True positive percentage at stage 1: 100.0 %
+True negative percentage at stage 1: 100.0 %
+
+Perfect stage 2. Stopping here.
+
+Object saved to _pickle_folder/trained_classifier.pkl
+
+Training completed.
+
+
+Total training time: 0.02197742462158203 seconds
 ```
 
 ## License
