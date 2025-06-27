@@ -273,7 +273,7 @@ class AdaBoost:
         best_directions = np.array([0] * self.feature_eval_matrix.shape[0], dtype=int)
 
         for i, feature_eval in enumerate(self.feature_eval_matrix):
-            # Order the feature evaluations
+            # Lookup the ordered feature evaluations
             ordered_idx = self.sorted_indices[i]
 
             # Compute signed weights
@@ -315,10 +315,10 @@ class AdaBoost:
             # Find the index of the minimum weighted error (greater than)
             min_error_gt_idx = np.argmin(weighted_errors_gt)
 
-            # Compute feature value corresponding to the minimum weighted error (lower equal to)
+            # Lookup feature value corresponding to the minimum weighted error (lower equal to)
             threshold_leq = unique_feature_eval[min_error_leq_idx]
 
-            # Compute feature value corresponding to the minimum weighted error (greater than)
+            # Lookup feature value corresponding to the minimum weighted error (greater than)
             threshold_gt = unique_feature_eval[min_error_gt_idx]
 
             # Select the minimum error between leq or gt
@@ -523,7 +523,7 @@ class AdaBoost:
                 )
 
                 print(
-                    f"Stage {stage_i + 1}, iteration {x + 1} completed. "
+                    f"Stage {stage_i + 1}, iteration {x + 1} completed.\n"
                     f"Feature index: {best_feature_idx}, Threshold: {best_threshold}, "
                     f"Direction: {'>' if best_direction == 1 else '<='}, Alpha: {alpha:.4f}, "
                     f"Error: {best_error}"
@@ -545,7 +545,7 @@ class AdaBoost:
 
             # If the correct predictions are 100% for this stage, then stop early
             if corr > 99.9:
-                print(f"\nPerfect stage {stage_i + 1}. Stopping here.\n")
+                print(f"Perfect stage {stage_i + 1}. Stopping here.\n")
                 break
 
             # Remove the samples and weights that are classified as negative by the majority vote

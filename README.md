@@ -55,7 +55,7 @@ save_pickle_obj(classifier.trained_classifier, "my_model.pkl")
 
 ## Core Algorithm: Finding Optimal Thresholds with the Integral Trick
 
-The most computationally intensive part of AdaBoost is finding the optimal threshold for each feature. This implementation uses an efficient "integral trick" to compute weighted errors for all possible thresholds in a single pass.
+One of the most computationally intensive part of AdaBoost is finding the optimal threshold for each feature. This implementation uses an efficient "integral trick" to compute weighted errors for all possible thresholds in a single pass O(n).
 
 ### The Problem
 
@@ -69,24 +69,69 @@ This naive approach has O(n²) complexity for n samples.
 
 ### The Integral Trick Solution
 
-Our optimized approach reduces this to O(n log n) complexity using cumulative operations:
+Our optimized approach reduces this to O(n) complexity using cumulative operations:
 
-1. **Sort samples** by feature values: `O(n log n)`
+1. **Lookup sorted samples** by feature values
 2. **Compute signed weights**: `signed_weights = sample_weights * sample_labels`
 3. **Handle duplicate values** by merging weights for identical feature values
 4. **Compute cumulative scores**: `cumulative_scores = cumsum(merged_weights)`
 5. **Apply the integral formula**: `weighted_scores = cumulative_scores * 2 - cumulative_scores[-1]`
 6. **Calculate errors efficiently**: `weighted_errors = (1 - weighted_scores) / 2`
 
-### Mathematical Foundation
+### Example: Finding Optimal Threshold Using the Integral Trick
 
-The key insight is that the weighted error for a threshold can be expressed as:
+Let's walk through finding the optimal threshold for a feature that evaluates on 5 samples using the efficient integral method.
 
+**Given Data:**
+- Feature values: `[5, 10, 2, -1, 3]`
+- Sample weights: `[0.20, 0.15, 0.15, 0.3, 0.2]`
+- Sample labels: `[1, -1, -1, 1, 1]`
+
+**Step 1: Sort samples by feature values**
+We need to reorder all arrays based on the sorted feature values:
+
+| Feature Values | Sample Weights | Sample Labels |
+|---------------|----------------|---------------|
+| -1            | 0.3           | 1             |
+| 2             | 0.15          | -1            |
+| 3             | 0.2           | 1             |
+| 5             | 0.2           | 1             |
+| 10            | 0.15          | -1            |
+
+**Step 2: Compute signed weights**
+Multiply each sample weight by its corresponding label:
 ```
-error = (total_positive_weight - 2 * cumulative_positive_weight_below_threshold) / 2
+signed_weights = [0.3×1, 0.15×(-1), 0.2×1, 0.2×1, 0.15×(-1)]
+               = [0.3, -0.15, 0.2, 0.2, -0.15]
 ```
 
-By pre-computing cumulative sums, we can evaluate all thresholds simultaneously rather than iteratively.
+**Step 3: Calculate cumulative scores**
+Compute the running sum of signed weights:
+```
+cumulative_scores = [0.3, 0.15, 0.35, 0.55, 0.40]
+```
+
+**Step 4: Apply the integral formula**
+Transform cumulative scores using: `weighted_scores = cumulative_scores × 2 - final_sum`
+```
+final_sum = 0.40
+weighted_scores = [0.3×2-0.40, 0.15×2-0.40, 0.35×2-0.40, 0.55×2-0.40, 0.40×2-0.40]
+                = [0.2, -0.10, 0.30, 0.70, 0.40]
+```
+
+**Step 5: Convert to weighted errors**
+For "less than or equal" thresholds: `error = (1 - weighted_score) / 2`
+```
+errors_leq = [(1-0.2)/2, (1-(-0.10))/2, (1-0.30)/2, (1-0.70)/2, (1-0.40)/2]
+           = [0.40, 0.55, 0.35, 0.15, 0.30]
+```
+
+**Step 6: Find optimal threshold**
+The minimum error is **0.15** at index 3, corresponding to threshold value **5**.
+
+**Result:** Using threshold `≤ 5` gives the lowest weighted error of 0.15, making it the optimal threshold for this feature.
+
+This approach evaluates all possible thresholds in a single pass, avoiding the need to iterate through each threshold individually—a significant computational advantage for large datasets.
 
 ### Implementation Details
 
