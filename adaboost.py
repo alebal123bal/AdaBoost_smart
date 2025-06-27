@@ -154,10 +154,10 @@ class AdaBoost:
         # Get the current stage of the trained classifier
         current_stage = self.trained_classifier[stage_idx]
 
-        # Get the features involved in this stage
+        # Get the indexes of features involved in this stage
         stage_feature_idxs = [x["feature_idx"] for x in current_stage]
 
-        # Get the evaluations for the sample
+        # Get the evaluations at these feature indexes, for this sample
         sample_evaluations = self.feature_eval_matrix[stage_feature_idxs, sample_idx]
 
         # Do majority voting based on the evaluations and the thresholds
@@ -422,35 +422,59 @@ class AdaBoost:
         # Sort again
         self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1)
 
-    def print_statistics(self, predictions, stage_idx):
+    def get_statistics(self, predictions):
         """
-        Print statistics about the predictions at the given stage.
+        Return statistics from the given predictions.
 
         Args:
             predictions (numpy.ndarray): Array of predictions for the current stage.
-            stage_idx (int): Index of the stage to print statistics for.
+
+        Returns:
+            correct_predictions (float): Percentage of correct predictions.
+            true_positives (float): Percentage of true positives.
+            true_negatives (float): Percentage of true negatives.
         """
 
         correct_predictions = np.mean(predictions == self.sample_labels) * 100
         true_positives = np.mean(predictions[self.sample_labels == 1] == 1) * 100
-        true_negatives = np.mean(predictions[self.sample_labels == -1] == -1) * 100
+        true_negatives = (
+            np.mean(predictions[self.sample_labels == -1] == -1) * 100
+            if -1
+            in self.sample_labels  # Check if not all negative samples were cropped
+            else 100.0
+        )
+
+        return correct_predictions, true_positives, true_negatives
+
+    def print_statistics(
+        self, stage_idx: int, corr_pred: float, true_pos: float, true_neg: float
+    ):
+        """
+        Print statistics for this stage
+
+        Args:
+            stage_idx (int): Stage index
+            corr_pred (float): Correct predictions
+            true_pos (float): True positives
+            true_neg (float): True negatives
+        """
 
         print(f"\nStatistics for stage {stage_idx + 1}:\n")
 
         print(
             f"Percentage of correct predictions at stage {stage_idx}:",
-            correct_predictions,
+            corr_pred,
             "%",
         )
         print(
             f"True positive percentage at stage {stage_idx}:",
-            true_positives,
+            true_pos,
             "%",
         )
 
         print(
             f"True negative percentage at stage {stage_idx}:",
-            true_negatives,
+            true_neg,
             "%\n",
         )
 
@@ -501,27 +525,28 @@ class AdaBoost:
                 print(
                     f"Stage {stage_i + 1}, iteration {x + 1} completed. "
                     f"Feature index: {best_feature_idx}, Threshold: {best_threshold}, "
-                    f"Direction: {'>' if best_direction == 1 else '<='}, Alpha: {alpha:.4f}"
+                    f"Direction: {'>' if best_direction == 1 else '<='}, Alpha: {alpha:.4f}, "
+                    f"Error: {best_error}"
                 )
-
-                if np.abs(best_error) < 1e-10:
-                    print(
-                        f"\nPerfect feature found at stage {stage_i + 1}, iteration {x + 1}. "
-                    )
-                    break  # Stop if a perfect feature is found
 
             # Append this stage to the full classifier's list of stages
             self.trained_classifier.append(stage_classifier)
 
-            if np.abs(best_error) < 1e-10:
-                print("Stopping training early due to prefect feature.\n")
-                break  # Stop training if a perfect feature is found
-
             # Get this stage predictions
             predictions = self.get_predictions(stage_idx=stage_i)
 
-            # Print statistics for this stage
-            self.print_statistics(predictions=predictions, stage_idx=stage_i)
+            # Get statistics for this stage
+            corr, tp, tn = self.get_statistics(predictions=predictions)
+
+            # Print statistics
+            self.print_statistics(
+                stage_idx=stage_i, corr_pred=corr, true_pos=tp, true_neg=tn
+            )
+
+            # If the correct predictions are 100% for this stage, then stop early
+            if corr > 99.9:
+                print(f"\nPerfect stage {stage_i + 1}. Stopping here.\n")
+                break
 
             # Remove the samples and weights that are classified as negative by the majority vote
             self.crop_negatives(predictions=predictions)
@@ -556,9 +581,9 @@ if TEST:
     SAMPLE_LABELS = np.array([1, -1, -1, 1, 1])
 
     # Try a big dataset
-    FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data(
-        size_x=5000, size_y=10000, bias_strenght=40
-    )
+    # FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data(
+    #     size_x=5000, size_y=10000, bias_strenght=40
+    # )
 
     print("Feature Evaluation Matrix:")
     print(FEATURE_EVAL_MATRIX)
