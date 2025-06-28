@@ -5,6 +5,7 @@ Date: 2025-06-06
 Version: 1.0.0
 """
 
+import os
 import time
 import pickle
 import numpy as np
@@ -15,6 +16,10 @@ def save_pickle_obj(obj, filename="trained_classifier.pkl"):
     """
     Save the classifier using pickle
     """
+    # Create folder if it does not exist
+
+    if not os.path.exists("_pickle_folder"):
+        os.makedirs("_pickle_folder")
     with open(filename, "wb") as f:
         pickle.dump(obj, f)
     print(f"Object saved to {filename}")
