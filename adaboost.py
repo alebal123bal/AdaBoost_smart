@@ -221,6 +221,13 @@ class AdaBoost:
         Perform cascade predictions on all samples in the feature evaluation matrix.
         This method applies the majority voting for each sample across all stages
         and returns the predictions.
+        Please pass the new feature evaluation matrix, sample weights and labels
+        to this method, as it will reload them and use them for predictions.
+
+        Args:
+            matrix (numpy.ndarray): The feature evaluation matrix to use for predictions.
+            weights (numpy.ndarray): The sample weights to use for predictions.
+            labels (numpy.ndarray): The sample labels to use for predictions.
 
         Returns:
             numpy.ndarray: An array of predicted labels for all samples.
