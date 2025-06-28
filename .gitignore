@@ -1,5 +1,2 @@
-_full_image
-_training_set_harder
-_pickle_folder
-pycache
+_pickle_folder/trained_classifier.pkl
 *.pyc
