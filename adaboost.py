@@ -1,5 +1,5 @@
 """
-Optimized AdaBoost nummpy implementation
+Optimized AdaBoost numpy implementation
 Author: Alessandro Balzan
 Date: 2025-06-06
 Version: 1.0.0
