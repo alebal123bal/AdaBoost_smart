@@ -16,13 +16,16 @@ def save_pickle_obj(obj, filename="trained_classifier.pkl"):
     """
     Save the classifier using pickle
     """
+    # Get cwd
+    cwd = os.getcwd()
     # Create folder if it does not exist
-
-    if not os.path.exists("_pickle_folder"):
-        os.makedirs("_pickle_folder")
-    with open(filename, "wb") as f:
+    folder = "_pickle_folder"
+    if not os.path.exists(os.path.join(cwd, folder)):
+        os.makedirs(os.path.join(cwd, folder))
+    # Save the object to a file
+    with open(os.path.join(cwd, folder, filename), "wb") as f:
         pickle.dump(obj, f)
-    print(f"Object saved to {filename}")
+    print(f"Classifier saved to {os.path.join(cwd, folder, filename)}")
 
 
 def load_pickle_obj(filename="trained_classifier.pkl"):
@@ -566,7 +569,7 @@ class AdaBoost:
 
         # Save the trained classifier to a file
         save_pickle_obj(
-            filename="_pickle_folder/trained_classifier.pkl",
+            filename="trained_classifier.pkl",
             obj=self.trained_classifier,
         )
 
