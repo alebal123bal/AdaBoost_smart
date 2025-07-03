@@ -219,7 +219,7 @@ class AdaBoost:
 
         return predictions
 
-    def cascade_predictions(self, matrix, weights, labels):
+    def get_overall_accuracy(self, matrix, weights, labels):
         """
         Perform cascade predictions on all samples in the feature evaluation matrix.
         This method applies the majority voting for each sample across all stages
@@ -235,7 +235,7 @@ class AdaBoost:
         Returns:
             numpy.ndarray: An array of predicted labels for all samples.
         """
-        # Reload the matrix (instead of locally copying it)
+        # Reload the matrix
         self.feature_eval_matrix = matrix
         self.sample_weights = weights
         self.sample_labels = labels
