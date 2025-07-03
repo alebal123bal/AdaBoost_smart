@@ -571,9 +571,7 @@ class AdaBoost:
         )
 
 
-# Set to True to run the test
-TEST = True
-if TEST:
+if __name__ == "__main__":
     # Set the seed for reproducibility
     np.random.seed(42)
 

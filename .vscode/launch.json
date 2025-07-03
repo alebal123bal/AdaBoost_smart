@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug AdaBoost",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "adaboost",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Run AdaBoost",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "adaboost",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "stopOnEntry": false
+        }
+    ]
+}
