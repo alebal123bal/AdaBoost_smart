@@ -460,18 +460,18 @@ class AdaBoost:
         print(f"\nStatistics for stage {stage_idx + 1}:\n")
 
         print(
-            f"Percentage of correct predictions at stage {stage_idx}:",
+            f"Percentage of correct predictions at stage {stage_idx + 1}:",
             corr_pred,
             "%",
         )
         print(
-            f"True positive percentage at stage {stage_idx}:",
+            f"True positive percentage at stage {stage_idx + 1}:",
             true_pos,
             "%",
         )
 
         print(
-            f"True negative percentage at stage {stage_idx}:",
+            f"True negative percentage at stage {stage_idx + 1}:",
             true_neg,
             "%\n",
         )
@@ -554,6 +554,7 @@ class AdaBoost:
                 break
 
             # Remove the samples and weights that are classified as negative by the majority vote
+            print("Cropping negatives from the feature evaluation matrix...")
             (
                 self.feature_eval_matrix,
                 self.sample_weights,
