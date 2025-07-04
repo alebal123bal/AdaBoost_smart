@@ -5,14 +5,14 @@
             "name": "Debug AdaBoost",
             "type": "debugpy",
             "request": "launch",
-            "module": "adaboost",
+            "module": "adaboost_test",
             "console": "integratedTerminal"
         },
         {
             "name": "Run AdaBoost",
             "type": "debugpy",
             "request": "launch",
-            "module": "adaboost",
+            "module": "adaboost_test",
             "console": "integratedTerminal",
             "justMyCode": false,
             "stopOnEntry": false
