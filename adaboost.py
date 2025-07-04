@@ -115,9 +115,9 @@ def find_best_feature_numba(
     n_features = feature_eval_matrix.shape[0]
     n_samples = feature_eval_matrix.shape[1]
 
-    best_thresholds = np.zeros(n_features, dtype=np.float64)
-    best_errors = np.full(n_features, np.inf, dtype=np.float64)
-    best_directions = np.zeros(n_features, dtype=np.int32)
+    best_thresholds = np.zeros(n_features, dtype=feature_eval_matrix.dtype)
+    best_errors = np.full(n_features, np.inf, dtype=np.float32)
+    best_directions = np.zeros(n_features, dtype=np.int8)
 
     for i in prange(n_features):  # Parallelize across features
         feature_eval = feature_eval_matrix[i]
@@ -342,7 +342,7 @@ class AdaBoost:
         feature_eval = self.feature_eval_matrix[feature_idx]
 
         # Initialize an array assuming all wrong (+1) predictions
-        weight_arr = np.ones(feature_eval.shape[0], dtype=int)
+        weight_arr = np.ones(feature_eval.shape[0], dtype=np.int8)
 
         # Compact version
         prediction_indexes = (
