@@ -225,6 +225,31 @@ def find_weight_update_array_numba(feature_eval, sample_labels, threshold, direc
     return weight_arr
 
 
+@njit
+def weight_update_numba(sample_weights, weight_update_array, alpha):
+    """
+    Update and normalize sample weights according to the AdaBoost algorithm (Numba-optimized).
+
+    Args:
+        sample_weights (numpy.ndarray): Array of sample weights to be updated (in-place).
+        weight_update_array (numpy.ndarray): +1 for incorrect samples; -1 for correct ones.
+        alpha (float): Amount of say.
+
+    Returns:
+        None: The sample_weights array is updated in-place.
+    """
+    n_samples = sample_weights.shape[0]
+
+    # Update sample weights
+    for i in range(n_samples):
+        sample_weights[i] *= np.exp(alpha * weight_update_array[i])
+
+    # Normalize sample weights
+    total_weight = np.sum(sample_weights)
+    for i in range(n_samples):
+        sample_weights[i] /= total_weight
+
+
 class AdaBoost:
     """
     Optimized AdaBoost classifier using numpy.
@@ -339,20 +364,6 @@ class AdaBoost:
 
     ## Training methods
 
-    def weight_update(self, weight_update_array, alpha):
-        """
-        Update and normalize sample weights according to the AdaBoost algorithm.
-
-        Args:
-            weight_update_array (numpy.ndarray): +1 for incorrect samples; -1 for correct ones
-            alpha (float): Amount of say
-        """
-
-        # Update the sample weights
-        self.sample_weights *= np.exp(alpha * weight_update_array)
-        # Normalize the sample weights
-        self.sample_weights /= np.sum(self.sample_weights)
-
     def crop_negatives(self, predictions):
         """
         Updates the feature evaluation matrix, sample weights and labels
@@ -464,7 +475,8 @@ class AdaBoost:
                 )
 
                 # Update weights
-                self.weight_update(
+                weight_update_numba(
+                    sample_weights=self.sample_weights,
                     weight_update_array=weight_update_array,
                     alpha=alpha,
                 )
