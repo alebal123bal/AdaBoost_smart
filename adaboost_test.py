@@ -5,7 +5,7 @@ Test script for the AdaBoost implementation.
 import time
 import numpy as np
 
-from adaboost import AdaBoost
+from adaboost import AdaBoost, ClassifierScoreCheck, generate_random_data_numba
 
 if __name__ == "__main__":
     # Set the seed for reproducibility
@@ -27,9 +27,9 @@ if __name__ == "__main__":
     SAMPLE_LABELS = np.array([1, -1, -1, 1, 1])
 
     # Try a big dataset
-    # FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data_numba(
-    #     size_x=5000, size_y=10000, bias_strenght=40
-    # )
+    FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data_numba(
+        size_x=3000, size_y=10000, bias_strenght=40
+    )
 
     print("Feature Evaluation Matrix:")
     print(FEATURE_EVAL_MATRIX)
@@ -56,3 +56,10 @@ if __name__ == "__main__":
     print("\nTraining completed.\n")
 
     print(f"\nTotal training time: {(time.time() - start_time)} seconds")
+
+    my_classifier = ClassifierScoreCheck(
+        feature_eval_matrix=FEATURE_EVAL_MATRIX,
+        sample_labels=SAMPLE_LABELS,
+    )
+
+    my_classifier.analyze()
