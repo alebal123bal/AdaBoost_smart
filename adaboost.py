@@ -306,6 +306,39 @@ def crop_negatives_numba(
     )
 
 
+def print_statistics(
+    stage_idx: int, corr_pred: float, true_pos: float, true_neg: float
+):
+    """
+    Print statistics for this stage
+
+    Args:
+        stage_idx (int): Stage index
+        corr_pred (float): Correct predictions
+        true_pos (float): True positives
+        true_neg (float): True negatives
+    """
+
+    print(f"\nStatistics for stage {stage_idx + 1}:\n")
+
+    print(
+        f"Percentage of correct predictions at stage {stage_idx + 1}:",
+        corr_pred,
+        "%",
+    )
+    print(
+        f"True positive percentage at stage {stage_idx + 1}:",
+        true_pos,
+        "%",
+    )
+
+    print(
+        f"True negative percentage at stage {stage_idx + 1}:",
+        true_neg,
+        "%\n",
+    )
+
+
 class AdaBoost:
     """
     Optimized AdaBoost classifier using numpy.
@@ -444,38 +477,6 @@ class AdaBoost:
 
         return correct_predictions, true_positives, true_negatives
 
-    def print_statistics(
-        self, stage_idx: int, corr_pred: float, true_pos: float, true_neg: float
-    ):
-        """
-        Print statistics for this stage
-
-        Args:
-            stage_idx (int): Stage index
-            corr_pred (float): Correct predictions
-            true_pos (float): True positives
-            true_neg (float): True negatives
-        """
-
-        print(f"\nStatistics for stage {stage_idx + 1}:\n")
-
-        print(
-            f"Percentage of correct predictions at stage {stage_idx + 1}:",
-            corr_pred,
-            "%",
-        )
-        print(
-            f"True positive percentage at stage {stage_idx + 1}:",
-            true_pos,
-            "%",
-        )
-
-        print(
-            f"True negative percentage at stage {stage_idx + 1}:",
-            true_neg,
-            "%\n",
-        )
-
     def train(self):
         """
         Train the AdaBoost classifier.
@@ -544,7 +545,7 @@ class AdaBoost:
             corr, tp, tn = self.get_statistics(predictions=predictions)
 
             # Print statistics
-            self.print_statistics(
+            print_statistics(
                 stage_idx=stage_i, corr_pred=corr, true_pos=tp, true_neg=tn
             )
 
