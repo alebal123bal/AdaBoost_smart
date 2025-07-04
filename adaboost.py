@@ -296,7 +296,7 @@ def unpack_stage(feature_eval_matrix_dtype, stage):
         [x["threshold"] for x in stage], dtype=feature_eval_matrix_dtype
     )
     directions = np.array([x["direction"] for x in stage], dtype=np.int8)
-    alphas = np.array([x["alpha"] for x in stage], dtype=np.float64)
+    alphas = np.array([x["alpha"] for x in stage], dtype=np.float32)
 
     return feature_idxs, thresholds, directions, alphas
 
