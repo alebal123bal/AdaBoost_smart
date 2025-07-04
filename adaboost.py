@@ -51,10 +51,15 @@ def load_pickle_obj(filename="trained_classifier.pkl"):
 
 
 ## Random generation methods
-def generate_random_data(size_x=5000, size_y=20000, bias_strenght=20):
+@njit
+def random_int_matrix(low, high, shape):  # Numba-compatible randint alternative
+    return np.random.randint(low, high, size=shape)
+
+
+@njit
+def generate_random_data_numba(size_x=5000, size_y=20000, bias_strenght=20):
     """
-    Generate random data for testing the AdaBoost classifier.
-    This function generates a random feature evaluation matrix, sample weights,
+    Generate random data for testing the AdaBoost classifier (Numba-optimized).
 
     Args:
         size_x (int, optional): Columns. Defaults to 5000.
@@ -68,42 +73,42 @@ def generate_random_data(size_x=5000, size_y=20000, bias_strenght=20):
             - sample_weights (numpy.ndarray): Randomly generated sample weights.
             - sample_labels (numpy.ndarray): Randomly generated sample labels.
     """
-    if size_x <= 0 or size_y <= 0:
-        raise ValueError("size_x and size_y must be positive integers.")
-    if bias_strenght <= 0 or bias_strenght > 50:
-        raise ValueError("bias_strenght must be a positive integer between 1 and 50.")
+    # Validation checks (Numba doesn't raise Python exceptions, so we use assert)
+    assert size_x > 0 and size_y > 0, "size_x and size_y must be positive integers."
+    assert 0 < bias_strenght <= 50, "bias_strenght must be between 1 and 50."
 
-    # Generate a random feature evaluation matrix
-    # Keep the positive samples values higher than the negative ones
-    # so that classification makes sense
-    _feature_eval_matrix = np.random.randint(
-        low=-100, high=100, size=(size_x, size_y)
-    ).astype(int)
+    # Initialize the random feature evaluation matrix
+    _feature_eval_matrix = random_int_matrix(-50, 50, (size_x, size_y)).astype(np.int8)
 
-    # Define split: 1/3 positive, 2/3 negative (more negatives than positives)
+    # Define split: 1/3 positive samples, 2/3 negative samples
     positive_count = size_y // 3
-    _ = size_y - positive_count
+    negative_count = size_y - positive_count
 
-    # Boost positive samples values (first 1/3)
-    _feature_eval_matrix[
-        :, :positive_count
-    ] += bias_strenght  # Positive samples get higher values
-    # Reduce negative samples values (remaining 2/3)
-    _feature_eval_matrix[
-        :, positive_count:
-    ] -= bias_strenght  # Negative samples get lower values
+    # Apply bias: Boost positive samples and reduce negative samples
+    for i in range(size_x):
+        for j in range(positive_count):
+            _feature_eval_matrix[i, j] += bias_strenght  # Boost positive samples
+        for j in range(positive_count, size_y):
+            _feature_eval_matrix[i, j] -= bias_strenght  # Reduce negative samples
 
-    # Generate sample weights - give positives higher initial weight
-    _sample_weights = np.ones(size_y) / size_y  # Start uniform
-    # Give more weight to positive samples (first 1/3)
-    _sample_weights[:positive_count] *= 3  # Positive samples get 3x weight
-    # Give less weight to negative samples (remaining 2/3)
-    _sample_weights[positive_count:] *= 0.5  # Negative samples get 0.5x weight
-    _sample_weights /= np.sum(_sample_weights)  # Normalize weights
+    # Initialize sample weights (start uniform)
+    _sample_weights = np.ones(size_y) / size_y
 
-    # Generate sample labels: 1/3 positive, 2/3 negative
-    _sample_labels = np.ones(size_y, dtype=int)  # Start all positive
-    _sample_labels[positive_count:] = -1  # Make last 2/3 negative
+    # Adjust weights: Give positives higher weight and negatives lower weight
+    for i in range(positive_count):
+        _sample_weights[i] *= 3  # Positive samples get 3x weight
+    for i in range(positive_count, size_y):
+        _sample_weights[i] *= 0.5  # Negative samples get 0.5x weight
+
+    # Normalize weights
+    total_weight = np.sum(_sample_weights)
+    for i in range(size_y):
+        _sample_weights[i] /= total_weight
+
+    # Generate sample labels: 1 for positives, -1 for negatives
+    _sample_labels = np.ones(size_y, dtype=np.int8)
+    for i in range(positive_count, size_y):
+        _sample_labels[i] = -1  # Negative samples
 
     return _feature_eval_matrix, _sample_weights, _sample_labels
 
@@ -557,9 +562,9 @@ if __name__ == "__main__":
     SAMPLE_LABELS = np.array([1, -1, -1, 1, 1])
 
     # Try a big dataset
-    # FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data(
-    #     size_x=5000, size_y=10000, bias_strenght=40
-    # )
+    FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data_numba(
+        size_x=5000, size_y=10000, bias_strenght=40
+    )
 
     print("Feature Evaluation Matrix:")
     print(FEATURE_EVAL_MATRIX)
