@@ -1,8 +1,8 @@
 """
-Optimized AdaBoost numpy implementation
+Optimized AdaBoost numpy implementation. Now with numba.
 Author: Alessandro Balzan
-Date: 2025-06-06
-Version: 1.0.0
+Date: 2025-07-04
+Version: 2.0.0
 """
 
 import os
@@ -135,6 +135,7 @@ def sort_feature_matrix_numba(feature_eval_matrix):
     return sorted_indices
 
 
+## Training methods
 @njit(parallel=True)
 def find_best_feature_numba(
     feature_eval_matrix, sample_weights, sample_labels, sorted_indices
