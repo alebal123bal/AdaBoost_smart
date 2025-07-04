@@ -9,6 +9,7 @@ import os
 import time
 import pickle
 import numpy as np
+from numba import njit, prange
 
 
 ## Pickle utils methods
@@ -105,6 +106,62 @@ def generate_random_data(size_x=5000, size_y=20000, bias_strenght=20):
     _sample_labels[positive_count:] = -1  # Make last 2/3 negative
 
     return _feature_eval_matrix, _sample_weights, _sample_labels
+
+
+@njit(parallel=True)
+def find_best_feature_numba(
+    feature_eval_matrix, sample_weights, sample_labels, sorted_indices
+):
+    n_features = feature_eval_matrix.shape[0]
+    n_samples = feature_eval_matrix.shape[1]
+
+    best_thresholds = np.zeros(n_features, dtype=np.float64)
+    best_errors = np.full(n_features, np.inf, dtype=np.float64)
+    best_directions = np.zeros(n_features, dtype=np.int32)
+
+    for i in prange(n_features):  # Parallelize across features
+        feature_eval = feature_eval_matrix[i]
+        ordered_idx = sorted_indices[i]
+        signed_weights = sample_weights * sample_labels
+        ordered_signed_weights = signed_weights[ordered_idx]
+
+        # Compute cumulative scores
+        cumulative_scores = np.cumsum(ordered_signed_weights)
+        total_score = cumulative_scores[-1]
+        weighted_scores = cumulative_scores * 2 - total_score
+
+        # Compute weighted errors
+        weighted_errors_leq = (1 - weighted_scores) / 2
+        weighted_errors_gt = 1 - weighted_errors_leq
+
+        # Find minimum weighted error
+        min_error_leq_idx = np.argmin(weighted_errors_leq)
+        min_error_gt_idx = np.argmin(weighted_errors_gt)
+
+        min_error_leq = weighted_errors_leq[min_error_leq_idx]
+        min_error_gt = weighted_errors_gt[min_error_gt_idx]
+
+        if min_error_leq < min_error_gt:
+            best_thresholds[i] = feature_eval[ordered_idx[min_error_leq_idx]]
+            best_errors[i] = min_error_leq
+            best_directions[i] = 0
+        else:
+            best_thresholds[i] = feature_eval[ordered_idx[min_error_gt_idx]]
+            best_errors[i] = min_error_gt
+            best_directions[i] = 1
+
+    # Find global best feature
+    best_idx = np.argmin(best_errors)
+    epsilon = max(1e-10, best_errors[best_idx])  # Avoid zero division
+    alpha = 0.5 * np.log((1 - epsilon) / epsilon)
+
+    return (
+        best_idx,
+        best_thresholds[best_idx],
+        best_directions[best_idx],
+        best_errors[best_idx],
+        alpha,
+    )
 
 
 class AdaBoost:
@@ -266,105 +323,6 @@ class AdaBoost:
         return final_predictions
 
     ## Training methods
-    def find_best_feature(self):
-        """
-        Find the best feature given the feature evaluation matrix, sample weights and labels.
-
-        Returns:
-            tuple: A tuple containing:
-                - best_idx (int): Index of the best feature.
-                - best_threshold (float): Best threshold for the feature.
-                - best_direction (int): Direction of the threshold (0 for "leq", 1 for "gt").
-                - best_error (float): Weighted error of the best feature.
-                - alpha (float): Amount of say for the best feature.
-        """
-
-        # Best thresholds vector, one for each feature
-        best_thresholds = np.array([0] * self.feature_eval_matrix.shape[0], dtype=int)
-        # Weighted error vector for using the threshold (both directions)
-        best_errors = np.array([0] * self.feature_eval_matrix.shape[0], dtype=float)
-
-        # Best directions vector, 0 for "lower than or equal to", 1 for "greater than"
-        best_directions = np.array([0] * self.feature_eval_matrix.shape[0], dtype=int)
-
-        for i, feature_eval in enumerate(self.feature_eval_matrix):
-            # Lookup the ordered feature evaluations
-            ordered_idx = self.sorted_indices[i]
-
-            # Compute signed weights
-            signed_weights = self.sample_weights * self.sample_labels
-
-            # Order the signed weights
-            ordered_signed_weights = signed_weights[ordered_idx]
-
-            # Optional: merge non unique feature evaluations
-            unique_feature_eval, inverse_indices = np.unique(
-                feature_eval[ordered_idx], return_inverse=True
-            )
-            # Merge the weights
-            merged_weights = np.bincount(
-                inverse_indices, weights=ordered_signed_weights
-            )
-            # Merge the labels
-            merged_labels = np.bincount(
-                inverse_indices, weights=self.sample_labels[ordered_idx]
-            )
-            # Where the label is now 0, set it to 1
-            merged_labels[merged_labels == 0] = 1
-
-            # Compute cumulative scores
-            cumulative_scores = np.cumsum(merged_weights)
-
-            # Use this formula for the weighted scores
-            weighted_scores = cumulative_scores * 2 - cumulative_scores[-1]
-
-            # Compute the weighted error (lower equal to)
-            weighted_errors_leq = (1 - weighted_scores) / 2
-
-            # Compute the weighted error (greater than)
-            weighted_errors_gt = 1 - weighted_errors_leq
-
-            # Find the index of the minimum weighted error (lower equal to)
-            min_error_leq_idx = np.argmin(weighted_errors_leq)
-
-            # Find the index of the minimum weighted error (greater than)
-            min_error_gt_idx = np.argmin(weighted_errors_gt)
-
-            # Lookup feature value corresponding to the minimum weighted error (lower equal to)
-            threshold_leq = unique_feature_eval[min_error_leq_idx]
-
-            # Lookup feature value corresponding to the minimum weighted error (greater than)
-            threshold_gt = unique_feature_eval[min_error_gt_idx]
-
-            # Select the minimum error between leq or gt
-            min_error_leq = weighted_errors_leq[min_error_leq_idx]
-            min_error_gt = weighted_errors_gt[min_error_gt_idx]
-
-            if min_error_leq < min_error_gt:
-                # Minimum error is better for "lower equal to"
-                best_thresholds[i] = threshold_leq
-                best_errors[i] = min_error_leq
-                best_directions[i] = 0
-            else:
-                # Minimum error is better for "greater than"
-                best_thresholds[i] = threshold_gt
-                best_errors[i] = min_error_gt
-                best_directions[i] = 1
-
-        # Outside the loop, find the best feature
-        best_idx = np.argmin(best_errors)
-
-        # Compute amount of say ("alpha")
-        epsilon = np.max([1e-10, best_errors[best_idx]])
-        alpha = 0.5 * np.log((1 - epsilon) / (epsilon))
-
-        return (
-            best_idx,
-            best_thresholds[best_idx],
-            best_directions[best_idx],
-            best_errors[best_idx],
-            alpha,
-        )
 
     def find_weight_update_array(self, feature_idx, threshold, direction):
         """
@@ -510,7 +468,12 @@ class AdaBoost:
 
                 # Find the best feature
                 best_feature_idx, best_threshold, best_direction, best_error, alpha = (
-                    self.find_best_feature()
+                    find_best_feature_numba(
+                        feature_eval_matrix=self.feature_eval_matrix,
+                        sample_weights=self.sample_weights,
+                        sample_labels=self.sample_labels,
+                        sorted_indices=self.sorted_indices,
+                    )
                 )
 
                 # Get the weight-update array based on the best feature
