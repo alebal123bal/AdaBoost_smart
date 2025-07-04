@@ -250,6 +250,62 @@ def weight_update_numba(sample_weights, weight_update_array, alpha):
         sample_weights[i] /= total_weight
 
 
+@njit
+def crop_negatives_numba(
+    feature_eval_matrix, sample_weights, sample_labels, predictions
+):
+    """
+    Update the feature evaluation matrix, sample weights, and labels
+    to only include samples classified as positive. Sort the feature evaluation
+    matrix again after cropping.
+
+    Args:
+        feature_eval_matrix (np.ndarray): Matrix of feature evaluations (shape: [n_features, n_samples]).
+        sample_weights (np.ndarray): Array of sample weights (shape: [n_samples]).
+        sample_labels (np.ndarray): Array of sample labels (shape: [n_samples]).
+        predictions (np.ndarray): Array of predictions for the current stage (shape: [n_samples]).
+
+    Returns:
+        tuple: Updated feature_eval_matrix, sample_weights, sample_labels, and sorted_indices.
+    """
+    n_features, n_samples = feature_eval_matrix.shape
+
+    # Count the number of positive samples
+    positive_count = 0
+    for i in range(n_samples):
+        if predictions[i] == 1:
+            positive_count += 1
+
+    # Allocate new arrays for positive samples
+    new_feature_eval_matrix = np.empty(
+        (n_features, positive_count), dtype=feature_eval_matrix.dtype
+    )
+    new_sample_weights = np.empty(positive_count, dtype=sample_weights.dtype)
+    new_sample_labels = np.empty(positive_count, dtype=sample_labels.dtype)
+
+    # Copy positive samples to the new arrays
+    positive_index = 0
+    for i in range(n_samples):
+        if predictions[i] == 1:
+            for j in range(n_features):
+                new_feature_eval_matrix[j, positive_index] = feature_eval_matrix[j, i]
+            new_sample_weights[positive_index] = sample_weights[i]
+            new_sample_labels[positive_index] = sample_labels[i]
+            positive_index += 1
+
+    # Sort the updated feature evaluation matrix row-wise
+    sorted_indices = np.empty((n_features, positive_count), dtype=np.int16)
+    for i in range(n_features):
+        sorted_indices[i] = np.argsort(new_feature_eval_matrix[i])
+
+    return (
+        new_feature_eval_matrix,
+        new_sample_weights,
+        new_sample_labels,
+        sorted_indices,
+    )
+
+
 class AdaBoost:
     """
     Optimized AdaBoost classifier using numpy.
@@ -363,27 +419,6 @@ class AdaBoost:
         return predictions
 
     ## Training methods
-
-    def crop_negatives(self, predictions):
-        """
-        Updates the feature evaluation matrix, sample weights and labels
-        to only include the samples classified as positive.
-        Sort the feature evaluation matrix again after cropping.
-
-        Args:
-            predictions (numpy.ndarray): Array of predictions for the current stage.
-        """
-
-        # Find the samples that are classified as positive (1) by the majority vote
-        positive_samples = predictions == 1
-
-        # Remove the samples, weights and labels classified as negative by the majority vote
-        self.feature_eval_matrix = self.feature_eval_matrix[:, positive_samples]
-        self.sample_weights = self.sample_weights[positive_samples]
-        self.sample_labels = self.sample_labels[positive_samples]
-
-        # Sort again
-        self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1)
 
     def get_statistics(self, predictions):
         """
@@ -519,7 +554,17 @@ class AdaBoost:
                 break
 
             # Remove the samples and weights that are classified as negative by the majority vote
-            self.crop_negatives(predictions=predictions)
+            (
+                self.feature_eval_matrix,
+                self.sample_weights,
+                self.sample_labels,
+                self.sorted_indices,
+            ) = crop_negatives_numba(
+                feature_eval_matrix=self.feature_eval_matrix,
+                sample_weights=self.sample_weights,
+                sample_labels=self.sample_labels,
+                predictions=predictions,
+            )
             print("Cropped negatives from the feature evaluation matrix.\n")
 
         # Save the trained classifier to a file
