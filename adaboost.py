@@ -306,6 +306,45 @@ def crop_negatives_numba(
     )
 
 
+@njit
+def get_statistics_numba(predictions, sample_labels):
+    """
+    Return statistics from the given predictions (Numba-compatible).
+
+    Args:
+        predictions (numpy.ndarray): Array of predictions for the current stage.
+        sample_labels (numpy.ndarray): Array of true labels for the samples.
+
+    Returns:
+        tuple: (correct_predictions, true_positives, true_negatives)
+            - correct_predictions (float): Percentage of correct predictions.
+            - true_positives (float): Percentage of true positives.
+            - true_negatives (float): Percentage of true negatives.
+    """
+    # Correct predictions percentage
+    correct_predictions = (
+        np.sum(predictions == sample_labels) / sample_labels.shape[0]
+    ) * 100.0
+
+    # True positives percentage
+    positive_mask = sample_labels == 1
+    true_positives = (
+        (np.sum(predictions[positive_mask] == 1) / np.sum(positive_mask)) * 100.0
+        if np.sum(positive_mask) > 0
+        else 0.0
+    )
+
+    # True negatives percentage
+    negative_mask = sample_labels == -1
+    true_negatives = (
+        (np.sum(predictions[negative_mask] == -1) / np.sum(negative_mask)) * 100.0
+        if np.sum(negative_mask) > 0
+        else 0.0
+    )
+
+    return correct_predictions, true_positives, true_negatives
+
+
 def print_statistics(
     stage_idx: int, corr_pred: float, true_pos: float, true_neg: float
 ):
@@ -451,32 +490,6 @@ class AdaBoost:
 
         return predictions
 
-    ## Training methods
-
-    def get_statistics(self, predictions):
-        """
-        Return statistics from the given predictions.
-
-        Args:
-            predictions (numpy.ndarray): Array of predictions for the current stage.
-
-        Returns:
-            correct_predictions (float): Percentage of correct predictions.
-            true_positives (float): Percentage of true positives.
-            true_negatives (float): Percentage of true negatives.
-        """
-
-        correct_predictions = np.mean(predictions == self.sample_labels) * 100
-        true_positives = np.mean(predictions[self.sample_labels == 1] == 1) * 100
-        true_negatives = (
-            np.mean(predictions[self.sample_labels == -1] == -1) * 100
-            if -1
-            in self.sample_labels  # Check if not all negative samples were cropped
-            else 100.0
-        )
-
-        return correct_predictions, true_positives, true_negatives
-
     def train(self):
         """
         Train the AdaBoost classifier.
@@ -542,7 +555,10 @@ class AdaBoost:
             predictions = self.get_predictions(stage_idx=stage_i)
 
             # Get statistics for this stage
-            corr, tp, tn = self.get_statistics(predictions=predictions)
+            corr, tp, tn = get_statistics_numba(
+                predictions=predictions,
+                sample_labels=self.sample_labels,
+            )
 
             # Print statistics
             print_statistics(
