@@ -52,7 +52,15 @@ def load_pickle_obj(filename="trained_classifier.pkl"):
 
 ## Random generation methods
 @njit
-def random_int_matrix(low, high, shape):  # Numba-compatible randint alternative
+def random_int_matrix(low, high, shape):
+    """
+    Generate a random integer matrix with specified shape and range.
+
+    Args:
+        low (int): Lower bound for the random integers.
+        high (int): Upper bound for the random integers.
+        shape (tuple): Shape of the matrix to be generated.
+    """
     return np.random.randint(low, high, size=shape)
 
 
@@ -73,16 +81,15 @@ def generate_random_data_numba(size_x=5000, size_y=20000, bias_strenght=20):
             - sample_weights (numpy.ndarray): Randomly generated sample weights.
             - sample_labels (numpy.ndarray): Randomly generated sample labels.
     """
-    # Validation checks (Numba doesn't raise Python exceptions, so we use assert)
-    assert size_x > 0 and size_y > 0, "size_x and size_y must be positive integers."
-    assert 0 < bias_strenght <= 50, "bias_strenght must be between 1 and 50."
 
     # Initialize the random feature evaluation matrix
-    _feature_eval_matrix = random_int_matrix(-50, 50, (size_x, size_y)).astype(np.int8)
+    _feature_eval_matrix = random_int_matrix(-100, 100, (size_x, size_y)).astype(
+        np.int16
+    )
 
     # Define split: 1/3 positive samples, 2/3 negative samples
     positive_count = size_y // 3
-    negative_count = size_y - positive_count
+    negative_count = size_y - positive_count  # pylint: disable=unused-variable
 
     # Apply bias: Boost positive samples and reduce negative samples
     for i in range(size_x):
@@ -162,13 +169,13 @@ def find_best_feature_numba(
     """
 
     n_features = feature_eval_matrix.shape[0]
-    n_samples = feature_eval_matrix.shape[1]
+    n_samples = feature_eval_matrix.shape[1]  # pylint: disable=unused-variable
 
     best_thresholds = np.zeros(n_features, dtype=feature_eval_matrix.dtype)
     best_errors = np.full(n_features, np.inf, dtype=np.float32)
     best_directions = np.zeros(n_features, dtype=np.int8)
 
-    for i in prange(n_features):  # Parallelize across features
+    for i in prange(n_features):  # pylint: disable=not-an-iterable
         feature_eval = feature_eval_matrix[i]
         ordered_idx = sorted_indices[i]
         signed_weights = sample_weights * sample_labels
@@ -273,19 +280,22 @@ def weight_update_numba(sample_weights, weight_update_array, alpha):
         sample_weights[i] /= total_weight
 
 
-def preprocess_stage(stage):
+def unpack_stage(feature_eval_matrix_dtype, stage):
     """
-    Preprocess the trained classifier stage into Numba-compatible arrays.
+    Unpack the trained classifier stage into Numba-compatible arrays.
 
     Args:
+        feature_eval_matrix_dtype: (dtype): dtype of Matrix of feature evaluations
         stage (list): A list of dictionaries representing the stage.
 
     Returns:
         tuple: Numba-compatible arrays for feature indices, thresholds, directions, and alphas.
     """
     feature_idxs = np.array([x["feature_idx"] for x in stage], dtype=np.int32)
-    thresholds = np.array([x["threshold"] for x in stage], dtype=np.float64)
-    directions = np.array([x["direction"] for x in stage], dtype=np.int32)
+    thresholds = np.array(
+        [x["threshold"] for x in stage], dtype=feature_eval_matrix_dtype
+    )
+    directions = np.array([x["direction"] for x in stage], dtype=np.int8)
     alphas = np.array([x["alpha"] for x in stage], dtype=np.float64)
 
     return feature_idxs, thresholds, directions, alphas
@@ -596,22 +606,23 @@ class AdaBoost:
             # Append this stage to the full classifier's list of stages
             self.trained_classifier.append(stage_classifier)
 
+            # Preprocess the stage classifier for Numba compatibility
+            (
+                feature_idxs,
+                thresholds,
+                directions,
+                alphas,
+            ) = unpack_stage(self.feature_eval_matrix.dtype, stage_classifier)
+
             # Get this stage predictions
             predictions = get_predictions_numba(
                 feature_eval_matrix=self.feature_eval_matrix,
-                feature_idxs=np.array(
-                    [x["feature_idx"] for x in stage_classifier], dtype=np.int32
-                ),
-                thresholds=np.array(
-                    [x["threshold"] for x in stage_classifier], dtype=np.float64
-                ),
-                directions=np.array(
-                    [x["direction"] for x in stage_classifier], dtype=np.int32
-                ),
-                alphas=np.array(
-                    [x["alpha"] for x in stage_classifier], dtype=np.float64
-                ),
+                feature_idxs=feature_idxs,
+                thresholds=thresholds,
+                directions=directions,
+                alphas=alphas,
             )
+
             # Get statistics for this stage
             corr, tp, tn = get_statistics_numba(
                 predictions=predictions,
