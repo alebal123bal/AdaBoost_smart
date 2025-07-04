@@ -250,6 +250,99 @@ def weight_update_numba(sample_weights, weight_update_array, alpha):
         sample_weights[i] /= total_weight
 
 
+def preprocess_stage(stage):
+    """
+    Preprocess the trained classifier stage into Numba-compatible arrays.
+
+    Args:
+        stage (list): A list of dictionaries representing the stage.
+
+    Returns:
+        tuple: Numba-compatible arrays for feature indices, thresholds, directions, and alphas.
+    """
+    feature_idxs = np.array([x["feature_idx"] for x in stage], dtype=np.int32)
+    thresholds = np.array([x["threshold"] for x in stage], dtype=np.float64)
+    directions = np.array([x["direction"] for x in stage], dtype=np.int32)
+    alphas = np.array([x["alpha"] for x in stage], dtype=np.float64)
+
+    return feature_idxs, thresholds, directions, alphas
+
+
+@njit
+def majority_vote_numba(
+    feature_eval_matrix, feature_idxs, thresholds, directions, alphas, sample_idx
+):
+    """
+    Perform majority voting for the specified sample index using Numba.
+
+    Args:
+        feature_eval_matrix (np.ndarray): Matrix of feature evaluations.
+        feature_idxs (np.ndarray): Array of feature indices for the stage.
+        thresholds (np.ndarray): Array of thresholds for each feature.
+        directions (np.ndarray): Array of decision directions (1 for ">", 0 for "<=").
+        alphas (np.ndarray): Array of alpha values (weights) for each feature.
+        sample_idx (int): Index of the sample to evaluate.
+
+    Returns:
+        int: Predicted label for the sample based on the majority vote.
+    """
+    n_features = feature_idxs.shape[0]
+    total_vote = 0.0
+
+    for i in range(n_features):
+        # Get the feature index and the evaluation for the sample
+        feature_idx = feature_idxs[i]
+        sample_eval = feature_eval_matrix[feature_idx, sample_idx]
+
+        # Apply the threshold comparison based on direction
+        if directions[i] == 1:  # Direction: ">"
+            prediction = 1 if sample_eval > thresholds[i] else -1
+        else:  # Direction: "<="
+            prediction = 1 if sample_eval <= thresholds[i] else -1
+
+        # Compute the weighted vote
+        weighted_vote = prediction * alphas[i]
+        total_vote += weighted_vote
+
+    # Determine the predicted label based on the sign of the total vote
+    predicted_label = 1 if total_vote > 0 else -1
+
+    return predicted_label
+
+
+@njit
+def get_predictions_numba(
+    feature_eval_matrix, feature_idxs, thresholds, directions, alphas
+):
+    """
+    Compute predictions for all samples using majority voting.
+
+    Args:
+        feature_eval_matrix (np.ndarray): Matrix of feature evaluations.
+        feature_idxs (np.ndarray): Array of feature indices for the stage.
+        thresholds (np.ndarray): Array of thresholds for each feature.
+        directions (np.ndarray): Array of decision directions (1 for ">", 0 for "<=").
+        alphas (np.ndarray): Array of alpha values (weights) for each feature.
+
+    Returns:
+        np.ndarray: Array of predicted labels for all samples.
+    """
+    n_samples = feature_eval_matrix.shape[1]
+    predictions = np.empty(n_samples, dtype=np.int32)
+
+    for sample_idx in range(n_samples):
+        predictions[sample_idx] = majority_vote_numba(
+            feature_eval_matrix,
+            feature_idxs,
+            thresholds,
+            directions,
+            alphas,
+            sample_idx,
+        )
+
+    return predictions
+
+
 @njit
 def crop_negatives_numba(
     feature_eval_matrix, sample_weights, sample_labels, predictions
@@ -294,7 +387,7 @@ def crop_negatives_numba(
             positive_index += 1
 
     # Sort the updated feature evaluation matrix row-wise
-    sorted_indices = np.empty((n_features, positive_count), dtype=np.int16)
+    sorted_indices = np.empty((n_features, positive_count), dtype=np.uint32)
     for i in range(n_features):
         sorted_indices[i] = np.argsort(new_feature_eval_matrix[i])
 
@@ -411,84 +504,13 @@ class AdaBoost:
 
         # Precomputed sorted indices for each feature evaluation
         print("Precomputing sorted indices for feature evaluations...")
-        self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1)
+        self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1).astype(
+            np.uint32
+        )
         print("Done precomputing sorted indices for feature evaluations.\n")
 
         # Placeholder for the trained classifier
         self.trained_classifier = []
-
-    ## Inference methods
-    def majority_vote(self, sample_idx, stage_idx=0):
-        """
-        Perform majority voting on the specified sample index for the given stage.
-
-        Args:
-            sample_idx (int): Index of the sample to evaluate.
-            stage_idx (int, optional): The index of the stage to evaluate. Defaults to 0.
-
-        Returns:
-            int: Predicted label for the sample based on the majority vote.
-        """
-
-        # Get the current stage of the trained classifier
-        current_stage = self.trained_classifier[stage_idx]
-
-        # Get the indexes of features involved in this stage
-        stage_feature_idxs = [x["feature_idx"] for x in current_stage]
-
-        # Get the evaluations at these feature indexes, for this sample
-        sample_evaluations = self.feature_eval_matrix[stage_feature_idxs, sample_idx]
-
-        # Do majority voting based on the evaluations and the thresholds
-        predictions = np.array(
-            [
-                (
-                    sample_evaluations[i] > x["threshold"]
-                    if x["direction"] == 1
-                    else sample_evaluations[i] <= x["threshold"]
-                )
-                for i, x in enumerate(current_stage)
-            ]
-        )
-
-        # Convert boolean predictions to -1 or 1
-        predictions = predictions.astype(int) * 2 - 1
-
-        # Compute the weighted votes
-        weighted_votes = predictions * np.array([x["alpha"] for x in current_stage])
-
-        # Sum the weighted votes
-        total_vote = np.sum(weighted_votes)
-
-        # Determine the predicted label based on the sign of the total vote
-        predicted_label = 1 if total_vote > 0 else -1
-
-        return predicted_label
-
-    def get_predictions(self, stage_idx: int):
-        """
-        Test the classifier on all samples in the feature evaluation matrix.
-        This method applies the majority voting for each sample and returns the predictions.
-
-        Args:
-            stage_idx (int): The index of the stage to test on
-
-        Returns:
-            numpy.ndarray: An array of predicted labels for all samples
-        """
-
-        # Get predictions
-        predictions = np.array(
-            [
-                self.majority_vote(
-                    sample_idx=i,
-                    stage_idx=stage_idx,
-                )
-                for i in range(self.feature_eval_matrix.shape[1])
-            ]
-        )
-
-        return predictions
 
     def train(self):
         """
@@ -552,8 +574,21 @@ class AdaBoost:
             self.trained_classifier.append(stage_classifier)
 
             # Get this stage predictions
-            predictions = self.get_predictions(stage_idx=stage_i)
-
+            predictions = get_predictions_numba(
+                feature_eval_matrix=self.feature_eval_matrix,
+                feature_idxs=np.array(
+                    [x["feature_idx"] for x in stage_classifier], dtype=np.int32
+                ),
+                thresholds=np.array(
+                    [x["threshold"] for x in stage_classifier], dtype=np.float64
+                ),
+                directions=np.array(
+                    [x["direction"] for x in stage_classifier], dtype=np.int32
+                ),
+                alphas=np.array(
+                    [x["alpha"] for x in stage_classifier], dtype=np.float64
+                ),
+            )
             # Get statistics for this stage
             corr, tp, tn = get_statistics_numba(
                 predictions=predictions,
