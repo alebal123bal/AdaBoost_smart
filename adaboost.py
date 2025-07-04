@@ -302,52 +302,6 @@ class AdaBoost:
 
         return predictions
 
-    def get_overall_accuracy(self, matrix, weights, labels):
-        """
-        Perform cascade predictions on all samples in the feature evaluation matrix.
-        This method applies the majority voting for each sample across all stages
-        and returns the predictions.
-        Please pass the new feature evaluation matrix, sample weights and labels
-        to this method, as it will reload them and use them for predictions.
-
-        Args:
-            matrix (numpy.ndarray): The feature evaluation matrix to use for predictions.
-            weights (numpy.ndarray): The sample weights to use for predictions.
-            labels (numpy.ndarray): The sample labels to use for predictions.
-
-        Returns:
-            numpy.ndarray: An array of predicted labels for all samples.
-        """
-        # Reload the matrix
-        self.feature_eval_matrix = matrix
-        self.sample_weights = weights
-        self.sample_labels = labels
-
-        # Get predictions for all stages
-        predictions = np.array(
-            [
-                self.get_predictions(stage_idx=i)
-                for i in range(len(self.trained_classifier))
-            ]
-        )
-
-        # Binary decision: only the samples that passed all stages are considered positive
-        all_ones_mask = np.sum(predictions == 1, axis=0)
-        # Put it to 1 where it equals to the number of stages
-        all_ones_mask = all_ones_mask == len(self.trained_classifier)
-
-        # Final predictions: 1 for positive samples, -1 for negative samples
-        final_predictions = np.where(all_ones_mask, 1, -1)
-
-        # Compare with original sample labels
-        print(
-            "Final percentage of correct predictions in cascade:",
-            np.mean(final_predictions == self.sample_labels) * 100,
-            "%",
-        )
-
-        return final_predictions
-
     ## Training methods
 
     def find_weight_update_array(self, feature_idx, threshold, direction):
