@@ -113,6 +113,28 @@ def generate_random_data_numba(size_x=5000, size_y=20000, bias_strenght=20):
     return _feature_eval_matrix, _sample_weights, _sample_labels
 
 
+## Init methods
+@njit
+def sort_feature_matrix_numba(feature_eval_matrix):
+    """
+    Perform row-wise argsort on the feature evaluation matrix using Numba.
+
+    Args:
+        feature_eval_matrix (np.ndarray): 2D array of feature evaluations (shape: [n_features, n_samples]).
+
+    Returns:
+        np.ndarray: 2D array of sorted indices for each row (shape: [n_features, n_samples]).
+    """
+    n_features, n_samples = feature_eval_matrix.shape
+    sorted_indices = np.empty((n_features, n_samples), dtype=np.uint32)
+
+    for i in range(n_features):
+        # Perform argsort on each row and cast to uint32
+        sorted_indices[i] = np.argsort(feature_eval_matrix[i]).astype(np.uint32)
+
+    return sorted_indices
+
+
 @njit(parallel=True)
 def find_best_feature_numba(
     feature_eval_matrix, sample_weights, sample_labels, sorted_indices
@@ -387,9 +409,9 @@ def crop_negatives_numba(
             positive_index += 1
 
     # Sort the updated feature evaluation matrix row-wise
-    sorted_indices = np.empty((n_features, positive_count), dtype=np.uint32)
-    for i in range(n_features):
-        sorted_indices[i] = np.argsort(new_feature_eval_matrix[i])
+    sorted_indices = sort_feature_matrix_numba(
+        feature_eval_matrix=new_feature_eval_matrix
+    )
 
     return (
         new_feature_eval_matrix,
@@ -504,8 +526,8 @@ class AdaBoost:
 
         # Precomputed sorted indices for each feature evaluation
         print("Precomputing sorted indices for feature evaluations...")
-        self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1).astype(
-            np.uint32
+        self.sorted_indices = sort_feature_matrix_numba(
+            feature_eval_matrix=self.feature_eval_matrix
         )
         print("Done precomputing sorted indices for feature evaluations.\n")
 
