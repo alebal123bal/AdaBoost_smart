@@ -1,14 +1,15 @@
 """
-Optimized AdaBoost numpy implementation
+Optimized AdaBoost numpy implementation. Now with numba.
 Author: Alessandro Balzan
-Date: 2025-06-06
-Version: 1.0.0
+Date: 2025-07-04
+Version: 2.0.0
 """
 
 import os
 import time
 import pickle
 import numpy as np
+from numba import njit, prange
 
 
 ## Pickle utils methods
@@ -50,10 +51,15 @@ def load_pickle_obj(filename="trained_classifier.pkl"):
 
 
 ## Random generation methods
-def generate_random_data(size_x=5000, size_y=20000, bias_strenght=20):
+@njit
+def random_int_matrix(low, high, shape):  # Numba-compatible randint alternative
+    return np.random.randint(low, high, size=shape)
+
+
+@njit
+def generate_random_data_numba(size_x=5000, size_y=20000, bias_strenght=20):
     """
-    Generate random data for testing the AdaBoost classifier.
-    This function generates a random feature evaluation matrix, sample weights,
+    Generate random data for testing the AdaBoost classifier (Numba-optimized).
 
     Args:
         size_x (int, optional): Columns. Defaults to 5000.
@@ -67,44 +73,425 @@ def generate_random_data(size_x=5000, size_y=20000, bias_strenght=20):
             - sample_weights (numpy.ndarray): Randomly generated sample weights.
             - sample_labels (numpy.ndarray): Randomly generated sample labels.
     """
-    if size_x <= 0 or size_y <= 0:
-        raise ValueError("size_x and size_y must be positive integers.")
-    if bias_strenght <= 0 or bias_strenght > 50:
-        raise ValueError("bias_strenght must be a positive integer between 1 and 50.")
+    # Validation checks (Numba doesn't raise Python exceptions, so we use assert)
+    assert size_x > 0 and size_y > 0, "size_x and size_y must be positive integers."
+    assert 0 < bias_strenght <= 50, "bias_strenght must be between 1 and 50."
 
-    # Generate a random feature evaluation matrix
-    # Keep the positive samples values higher than the negative ones
-    # so that classification makes sense
-    _feature_eval_matrix = np.random.randint(
-        low=-100, high=100, size=(size_x, size_y)
-    ).astype(int)
+    # Initialize the random feature evaluation matrix
+    _feature_eval_matrix = random_int_matrix(-50, 50, (size_x, size_y)).astype(np.int8)
 
-    # Define split: 1/3 positive, 2/3 negative (more negatives than positives)
+    # Define split: 1/3 positive samples, 2/3 negative samples
     positive_count = size_y // 3
-    _ = size_y - positive_count
+    negative_count = size_y - positive_count
 
-    # Boost positive samples values (first 1/3)
-    _feature_eval_matrix[
-        :, :positive_count
-    ] += bias_strenght  # Positive samples get higher values
-    # Reduce negative samples values (remaining 2/3)
-    _feature_eval_matrix[
-        :, positive_count:
-    ] -= bias_strenght  # Negative samples get lower values
+    # Apply bias: Boost positive samples and reduce negative samples
+    for i in range(size_x):
+        for j in range(positive_count):
+            _feature_eval_matrix[i, j] += bias_strenght  # Boost positive samples
+        for j in range(positive_count, size_y):
+            _feature_eval_matrix[i, j] -= bias_strenght  # Reduce negative samples
 
-    # Generate sample weights - give positives higher initial weight
-    _sample_weights = np.ones(size_y) / size_y  # Start uniform
-    # Give more weight to positive samples (first 1/3)
-    _sample_weights[:positive_count] *= 3  # Positive samples get 3x weight
-    # Give less weight to negative samples (remaining 2/3)
-    _sample_weights[positive_count:] *= 0.5  # Negative samples get 0.5x weight
-    _sample_weights /= np.sum(_sample_weights)  # Normalize weights
+    # Initialize sample weights (start uniform)
+    _sample_weights = np.ones(size_y) / size_y
 
-    # Generate sample labels: 1/3 positive, 2/3 negative
-    _sample_labels = np.ones(size_y, dtype=int)  # Start all positive
-    _sample_labels[positive_count:] = -1  # Make last 2/3 negative
+    # Adjust weights: Give positives higher weight and negatives lower weight
+    for i in range(positive_count):
+        _sample_weights[i] *= 3  # Positive samples get 3x weight
+    for i in range(positive_count, size_y):
+        _sample_weights[i] *= 0.5  # Negative samples get 0.5x weight
+
+    # Normalize weights
+    total_weight = np.sum(_sample_weights)
+    for i in range(size_y):
+        _sample_weights[i] /= total_weight
+
+    # Generate sample labels: 1 for positives, -1 for negatives
+    _sample_labels = np.ones(size_y, dtype=np.int8)
+    for i in range(positive_count, size_y):
+        _sample_labels[i] = -1  # Negative samples
 
     return _feature_eval_matrix, _sample_weights, _sample_labels
+
+
+## Init methods
+@njit
+def sort_feature_matrix_numba(feature_eval_matrix):
+    """
+    Perform row-wise argsort on the feature evaluation matrix using Numba.
+
+    Args:
+        feature_eval_matrix (np.ndarray): 2D array of feature evaluations (shape: [n_features, n_samples]).
+
+    Returns:
+        np.ndarray: 2D array of sorted indices for each row (shape: [n_features, n_samples]).
+    """
+    n_features, n_samples = feature_eval_matrix.shape
+    sorted_indices = np.empty((n_features, n_samples), dtype=np.uint32)
+
+    for i in range(n_features):
+        # Perform argsort on each row and cast to uint32
+        sorted_indices[i] = np.argsort(feature_eval_matrix[i]).astype(np.uint32)
+
+    return sorted_indices
+
+
+## Training methods
+@njit(parallel=True)
+def find_best_feature_numba(
+    feature_eval_matrix, sample_weights, sample_labels, sorted_indices
+):
+    """
+    Find the best feature for the AdaBoost classifier using Numba.
+    This function computes the best threshold and direction for each feature
+    based on the weighted errors, and returns the feature index, threshold,
+    direction, error, and alpha value.
+
+    Args:
+        feature_eval_matrix (numpy.ndarray): Matrix of feature evaluations.
+        sample_weights (numpy.ndarray): Weights for each sample.
+        sample_labels (numpy.ndarray): Labels for each sample.
+        sorted_indices (numpy.ndarray): Precomputed sorted indices for each feature evaluation.
+
+    Returns:
+        tuple: A tuple containing:
+            - best_idx (int): Index of the best feature.
+            - best_threshold (float): Best threshold for the feature.
+            - best_direction (int): Direction of the threshold (0 for <=, 1 for >).
+            - best_error (float): Best error for the feature.
+            - alpha (float): Alpha value for the feature.
+    """
+
+    n_features = feature_eval_matrix.shape[0]
+    n_samples = feature_eval_matrix.shape[1]
+
+    best_thresholds = np.zeros(n_features, dtype=feature_eval_matrix.dtype)
+    best_errors = np.full(n_features, np.inf, dtype=np.float32)
+    best_directions = np.zeros(n_features, dtype=np.int8)
+
+    for i in prange(n_features):  # Parallelize across features
+        feature_eval = feature_eval_matrix[i]
+        ordered_idx = sorted_indices[i]
+        signed_weights = sample_weights * sample_labels
+        ordered_signed_weights = signed_weights[ordered_idx]
+
+        # Compute cumulative scores
+        cumulative_scores = np.cumsum(ordered_signed_weights)
+        total_score = cumulative_scores[-1]
+        weighted_scores = cumulative_scores * 2 - total_score
+
+        # Compute weighted errors
+        weighted_errors_leq = (1 - weighted_scores) / 2
+        weighted_errors_gt = 1 - weighted_errors_leq
+
+        # Find minimum weighted error
+        min_error_leq_idx = np.argmin(weighted_errors_leq)
+        min_error_gt_idx = np.argmin(weighted_errors_gt)
+
+        min_error_leq = weighted_errors_leq[min_error_leq_idx]
+        min_error_gt = weighted_errors_gt[min_error_gt_idx]
+
+        if min_error_leq < min_error_gt:
+            best_thresholds[i] = feature_eval[ordered_idx[min_error_leq_idx]]
+            best_errors[i] = min_error_leq
+            best_directions[i] = 0
+        else:
+            best_thresholds[i] = feature_eval[ordered_idx[min_error_gt_idx]]
+            best_errors[i] = min_error_gt
+            best_directions[i] = 1
+
+    # Find global best feature
+    best_idx = np.argmin(best_errors)
+    epsilon = max(1e-10, best_errors[best_idx])  # Avoid zero division
+    alpha = 0.5 * np.log((1 - epsilon) / epsilon)
+
+    return (
+        best_idx,
+        best_thresholds[best_idx],
+        best_directions[best_idx],
+        best_errors[best_idx],
+        alpha,
+    )
+
+
+@njit
+def find_weight_update_array_numba(feature_eval, sample_labels, threshold, direction):
+    """
+    Find the indexes of the samples that are classified incorrectly.
+    "+1" for incorrectly classified samples; "-1" for correctly classified samples.
+
+    Args:
+        feature_eval (np.ndarray): Evaluations of the feature for all samples.
+        sample_labels (np.ndarray): True labels for the samples.
+        threshold (float): Threshold value for the feature evaluation.
+        direction (int): 0 for "lower than or equal to", 1 for "greater than".
+
+    Returns:
+        np.ndarray: "+1" for incorrect samples; "-1" for correct ones.
+    """
+    n_samples = feature_eval.shape[0]
+    weight_arr = np.ones(n_samples, dtype=np.int8)
+
+    # Iterate through each sample to compute predictions and weights
+    for i in range(n_samples):
+        # Perform threshold comparison based on direction
+        if direction == 0:  # "lower than or equal to"
+            prediction = 1 if feature_eval[i] <= threshold else -1
+        else:  # "greater than"
+            prediction = 1 if feature_eval[i] > threshold else -1
+
+        # Mark as correct (-1) or incorrect (+1)
+        if prediction == sample_labels[i]:
+            weight_arr[i] = -1  # Correctly classified
+        else:
+            weight_arr[i] = 1  # Incorrectly classified
+
+    return weight_arr
+
+
+@njit
+def weight_update_numba(sample_weights, weight_update_array, alpha):
+    """
+    Update and normalize sample weights according to the AdaBoost algorithm (Numba-optimized).
+
+    Args:
+        sample_weights (numpy.ndarray): Array of sample weights to be updated (in-place).
+        weight_update_array (numpy.ndarray): +1 for incorrect samples; -1 for correct ones.
+        alpha (float): Amount of say.
+
+    Returns:
+        None: The sample_weights array is updated in-place.
+    """
+    n_samples = sample_weights.shape[0]
+
+    # Update sample weights
+    for i in range(n_samples):
+        sample_weights[i] *= np.exp(alpha * weight_update_array[i])
+
+    # Normalize sample weights
+    total_weight = np.sum(sample_weights)
+    for i in range(n_samples):
+        sample_weights[i] /= total_weight
+
+
+def preprocess_stage(stage):
+    """
+    Preprocess the trained classifier stage into Numba-compatible arrays.
+
+    Args:
+        stage (list): A list of dictionaries representing the stage.
+
+    Returns:
+        tuple: Numba-compatible arrays for feature indices, thresholds, directions, and alphas.
+    """
+    feature_idxs = np.array([x["feature_idx"] for x in stage], dtype=np.int32)
+    thresholds = np.array([x["threshold"] for x in stage], dtype=np.float64)
+    directions = np.array([x["direction"] for x in stage], dtype=np.int32)
+    alphas = np.array([x["alpha"] for x in stage], dtype=np.float64)
+
+    return feature_idxs, thresholds, directions, alphas
+
+
+@njit
+def majority_vote_numba(
+    feature_eval_matrix, feature_idxs, thresholds, directions, alphas, sample_idx
+):
+    """
+    Perform majority voting for the specified sample index using Numba.
+
+    Args:
+        feature_eval_matrix (np.ndarray): Matrix of feature evaluations.
+        feature_idxs (np.ndarray): Array of feature indices for the stage.
+        thresholds (np.ndarray): Array of thresholds for each feature.
+        directions (np.ndarray): Array of decision directions (1 for ">", 0 for "<=").
+        alphas (np.ndarray): Array of alpha values (weights) for each feature.
+        sample_idx (int): Index of the sample to evaluate.
+
+    Returns:
+        int: Predicted label for the sample based on the majority vote.
+    """
+    n_features = feature_idxs.shape[0]
+    total_vote = 0.0
+
+    for i in range(n_features):
+        # Get the feature index and the evaluation for the sample
+        feature_idx = feature_idxs[i]
+        sample_eval = feature_eval_matrix[feature_idx, sample_idx]
+
+        # Apply the threshold comparison based on direction
+        if directions[i] == 1:  # Direction: ">"
+            prediction = 1 if sample_eval > thresholds[i] else -1
+        else:  # Direction: "<="
+            prediction = 1 if sample_eval <= thresholds[i] else -1
+
+        # Compute the weighted vote
+        weighted_vote = prediction * alphas[i]
+        total_vote += weighted_vote
+
+    # Determine the predicted label based on the sign of the total vote
+    predicted_label = 1 if total_vote > 0 else -1
+
+    return predicted_label
+
+
+@njit
+def get_predictions_numba(
+    feature_eval_matrix, feature_idxs, thresholds, directions, alphas
+):
+    """
+    Compute predictions for all samples using majority voting.
+
+    Args:
+        feature_eval_matrix (np.ndarray): Matrix of feature evaluations.
+        feature_idxs (np.ndarray): Array of feature indices for the stage.
+        thresholds (np.ndarray): Array of thresholds for each feature.
+        directions (np.ndarray): Array of decision directions (1 for ">", 0 for "<=").
+        alphas (np.ndarray): Array of alpha values (weights) for each feature.
+
+    Returns:
+        np.ndarray: Array of predicted labels for all samples.
+    """
+    n_samples = feature_eval_matrix.shape[1]
+    predictions = np.empty(n_samples, dtype=np.int32)
+
+    for sample_idx in range(n_samples):
+        predictions[sample_idx] = majority_vote_numba(
+            feature_eval_matrix,
+            feature_idxs,
+            thresholds,
+            directions,
+            alphas,
+            sample_idx,
+        )
+
+    return predictions
+
+
+@njit
+def crop_negatives_numba(
+    feature_eval_matrix, sample_weights, sample_labels, predictions
+):
+    """
+    Update the feature evaluation matrix, sample weights, and labels
+    to only include samples classified as positive. Sort the feature evaluation
+    matrix again after cropping.
+
+    Args:
+        feature_eval_matrix (np.ndarray): Matrix of feature evaluations (shape: [n_features, n_samples]).
+        sample_weights (np.ndarray): Array of sample weights (shape: [n_samples]).
+        sample_labels (np.ndarray): Array of sample labels (shape: [n_samples]).
+        predictions (np.ndarray): Array of predictions for the current stage (shape: [n_samples]).
+
+    Returns:
+        tuple: Updated feature_eval_matrix, sample_weights, sample_labels, and sorted_indices.
+    """
+    n_features, n_samples = feature_eval_matrix.shape
+
+    # Count the number of positive samples
+    positive_count = 0
+    for i in range(n_samples):
+        if predictions[i] == 1:
+            positive_count += 1
+
+    # Allocate new arrays for positive samples
+    new_feature_eval_matrix = np.empty(
+        (n_features, positive_count), dtype=feature_eval_matrix.dtype
+    )
+    new_sample_weights = np.empty(positive_count, dtype=sample_weights.dtype)
+    new_sample_labels = np.empty(positive_count, dtype=sample_labels.dtype)
+
+    # Copy positive samples to the new arrays
+    positive_index = 0
+    for i in range(n_samples):
+        if predictions[i] == 1:
+            for j in range(n_features):
+                new_feature_eval_matrix[j, positive_index] = feature_eval_matrix[j, i]
+            new_sample_weights[positive_index] = sample_weights[i]
+            new_sample_labels[positive_index] = sample_labels[i]
+            positive_index += 1
+
+    # Sort the updated feature evaluation matrix row-wise
+    sorted_indices = sort_feature_matrix_numba(
+        feature_eval_matrix=new_feature_eval_matrix
+    )
+
+    return (
+        new_feature_eval_matrix,
+        new_sample_weights,
+        new_sample_labels,
+        sorted_indices,
+    )
+
+
+@njit
+def get_statistics_numba(predictions, sample_labels):
+    """
+    Return statistics from the given predictions (Numba-compatible).
+
+    Args:
+        predictions (numpy.ndarray): Array of predictions for the current stage.
+        sample_labels (numpy.ndarray): Array of true labels for the samples.
+
+    Returns:
+        tuple: (correct_predictions, true_positives, true_negatives)
+            - correct_predictions (float): Percentage of correct predictions.
+            - true_positives (float): Percentage of true positives.
+            - true_negatives (float): Percentage of true negatives.
+    """
+    # Correct predictions percentage
+    correct_predictions = (
+        np.sum(predictions == sample_labels) / sample_labels.shape[0]
+    ) * 100.0
+
+    # True positives percentage
+    positive_mask = sample_labels == 1
+    true_positives = (
+        (np.sum(predictions[positive_mask] == 1) / np.sum(positive_mask)) * 100.0
+        if np.sum(positive_mask) > 0
+        else 0.0
+    )
+
+    # True negatives percentage
+    negative_mask = sample_labels == -1
+    true_negatives = (
+        (np.sum(predictions[negative_mask] == -1) / np.sum(negative_mask)) * 100.0
+        if np.sum(negative_mask) > 0
+        else 0.0
+    )
+
+    return correct_predictions, true_positives, true_negatives
+
+
+def print_statistics(
+    stage_idx: int, corr_pred: float, true_pos: float, true_neg: float
+):
+    """
+    Print statistics for this stage
+
+    Args:
+        stage_idx (int): Stage index
+        corr_pred (float): Correct predictions
+        true_pos (float): True positives
+        true_neg (float): True negatives
+    """
+
+    print(f"\nStatistics for stage {stage_idx + 1}:\n")
+
+    print(
+        f"Percentage of correct predictions at stage {stage_idx + 1}:",
+        corr_pred,
+        "%",
+    )
+    print(
+        f"True positive percentage at stage {stage_idx + 1}:",
+        true_pos,
+        "%",
+    )
+
+    print(
+        f"True negative percentage at stage {stage_idx + 1}:",
+        true_neg,
+        "%\n",
+    )
 
 
 class AdaBoost:
@@ -140,358 +527,13 @@ class AdaBoost:
 
         # Precomputed sorted indices for each feature evaluation
         print("Precomputing sorted indices for feature evaluations...")
-        self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1)
+        self.sorted_indices = sort_feature_matrix_numba(
+            feature_eval_matrix=self.feature_eval_matrix
+        )
         print("Done precomputing sorted indices for feature evaluations.\n")
 
         # Placeholder for the trained classifier
         self.trained_classifier = []
-
-    ## Inference methods
-    def majority_vote(self, sample_idx, stage_idx=0):
-        """
-        Perform majority voting on the specified sample index for the given stage.
-
-        Args:
-            sample_idx (int): Index of the sample to evaluate.
-            stage_idx (int, optional): The index of the stage to evaluate. Defaults to 0.
-
-        Returns:
-            int: Predicted label for the sample based on the majority vote.
-        """
-
-        # Get the current stage of the trained classifier
-        current_stage = self.trained_classifier[stage_idx]
-
-        # Get the indexes of features involved in this stage
-        stage_feature_idxs = [x["feature_idx"] for x in current_stage]
-
-        # Get the evaluations at these feature indexes, for this sample
-        sample_evaluations = self.feature_eval_matrix[stage_feature_idxs, sample_idx]
-
-        # Do majority voting based on the evaluations and the thresholds
-        predictions = np.array(
-            [
-                (
-                    sample_evaluations[i] > x["threshold"]
-                    if x["direction"] == 1
-                    else sample_evaluations[i] <= x["threshold"]
-                )
-                for i, x in enumerate(current_stage)
-            ]
-        )
-
-        # Convert boolean predictions to -1 or 1
-        predictions = predictions.astype(int) * 2 - 1
-
-        # Compute the weighted votes
-        weighted_votes = predictions * np.array([x["alpha"] for x in current_stage])
-
-        # Sum the weighted votes
-        total_vote = np.sum(weighted_votes)
-
-        # Determine the predicted label based on the sign of the total vote
-        predicted_label = 1 if total_vote > 0 else -1
-
-        return predicted_label
-
-    def get_predictions(self, stage_idx: int):
-        """
-        Test the classifier on all samples in the feature evaluation matrix.
-        This method applies the majority voting for each sample and returns the predictions.
-
-        Args:
-            stage_idx (int): The index of the stage to test on
-
-        Returns:
-            numpy.ndarray: An array of predicted labels for all samples
-        """
-
-        # Get predictions
-        predictions = np.array(
-            [
-                self.majority_vote(
-                    sample_idx=i,
-                    stage_idx=stage_idx,
-                )
-                for i in range(self.feature_eval_matrix.shape[1])
-            ]
-        )
-
-        return predictions
-
-    def get_overall_accuracy(self, matrix, weights, labels):
-        """
-        Perform cascade predictions on all samples in the feature evaluation matrix.
-        This method applies the majority voting for each sample across all stages
-        and returns the predictions.
-        Please pass the new feature evaluation matrix, sample weights and labels
-        to this method, as it will reload them and use them for predictions.
-
-        Args:
-            matrix (numpy.ndarray): The feature evaluation matrix to use for predictions.
-            weights (numpy.ndarray): The sample weights to use for predictions.
-            labels (numpy.ndarray): The sample labels to use for predictions.
-
-        Returns:
-            numpy.ndarray: An array of predicted labels for all samples.
-        """
-        # Reload the matrix
-        self.feature_eval_matrix = matrix
-        self.sample_weights = weights
-        self.sample_labels = labels
-
-        # Get predictions for all stages
-        predictions = np.array(
-            [
-                self.get_predictions(stage_idx=i)
-                for i in range(len(self.trained_classifier))
-            ]
-        )
-
-        # Binary decision: only the samples that passed all stages are considered positive
-        all_ones_mask = np.sum(predictions == 1, axis=0)
-        # Put it to 1 where it equals to the number of stages
-        all_ones_mask = all_ones_mask == len(self.trained_classifier)
-
-        # Final predictions: 1 for positive samples, -1 for negative samples
-        final_predictions = np.where(all_ones_mask, 1, -1)
-
-        # Compare with original sample labels
-        print(
-            "Final percentage of correct predictions in cascade:",
-            np.mean(final_predictions == self.sample_labels) * 100,
-            "%",
-        )
-
-        return final_predictions
-
-    ## Training methods
-    def find_best_feature(self):
-        """
-        Find the best feature given the feature evaluation matrix, sample weights and labels.
-
-        Returns:
-            tuple: A tuple containing:
-                - best_idx (int): Index of the best feature.
-                - best_threshold (float): Best threshold for the feature.
-                - best_direction (int): Direction of the threshold (0 for "leq", 1 for "gt").
-                - best_error (float): Weighted error of the best feature.
-                - alpha (float): Amount of say for the best feature.
-        """
-
-        # Best thresholds vector, one for each feature
-        best_thresholds = np.array([0] * self.feature_eval_matrix.shape[0], dtype=int)
-        # Weighted error vector for using the threshold (both directions)
-        best_errors = np.array([0] * self.feature_eval_matrix.shape[0], dtype=float)
-
-        # Best directions vector, 0 for "lower than or equal to", 1 for "greater than"
-        best_directions = np.array([0] * self.feature_eval_matrix.shape[0], dtype=int)
-
-        for i, feature_eval in enumerate(self.feature_eval_matrix):
-            # Lookup the ordered feature evaluations
-            ordered_idx = self.sorted_indices[i]
-
-            # Compute signed weights
-            signed_weights = self.sample_weights * self.sample_labels
-
-            # Order the signed weights
-            ordered_signed_weights = signed_weights[ordered_idx]
-
-            # Optional: merge non unique feature evaluations
-            unique_feature_eval, inverse_indices = np.unique(
-                feature_eval[ordered_idx], return_inverse=True
-            )
-            # Merge the weights
-            merged_weights = np.bincount(
-                inverse_indices, weights=ordered_signed_weights
-            )
-            # Merge the labels
-            merged_labels = np.bincount(
-                inverse_indices, weights=self.sample_labels[ordered_idx]
-            )
-            # Where the label is now 0, set it to 1
-            merged_labels[merged_labels == 0] = 1
-
-            # Compute cumulative scores
-            cumulative_scores = np.cumsum(merged_weights)
-
-            # Use this formula for the weighted scores
-            weighted_scores = cumulative_scores * 2 - cumulative_scores[-1]
-
-            # Compute the weighted error (lower equal to)
-            weighted_errors_leq = (1 - weighted_scores) / 2
-
-            # Compute the weighted error (greater than)
-            weighted_errors_gt = 1 - weighted_errors_leq
-
-            # Find the index of the minimum weighted error (lower equal to)
-            min_error_leq_idx = np.argmin(weighted_errors_leq)
-
-            # Find the index of the minimum weighted error (greater than)
-            min_error_gt_idx = np.argmin(weighted_errors_gt)
-
-            # Lookup feature value corresponding to the minimum weighted error (lower equal to)
-            threshold_leq = unique_feature_eval[min_error_leq_idx]
-
-            # Lookup feature value corresponding to the minimum weighted error (greater than)
-            threshold_gt = unique_feature_eval[min_error_gt_idx]
-
-            # Select the minimum error between leq or gt
-            min_error_leq = weighted_errors_leq[min_error_leq_idx]
-            min_error_gt = weighted_errors_gt[min_error_gt_idx]
-
-            if min_error_leq < min_error_gt:
-                # Minimum error is better for "lower equal to"
-                best_thresholds[i] = threshold_leq
-                best_errors[i] = min_error_leq
-                best_directions[i] = 0
-            else:
-                # Minimum error is better for "greater than"
-                best_thresholds[i] = threshold_gt
-                best_errors[i] = min_error_gt
-                best_directions[i] = 1
-
-        # Outside the loop, find the best feature
-        best_idx = np.argmin(best_errors)
-
-        # Compute amount of say ("alpha")
-        epsilon = np.max([1e-10, best_errors[best_idx]])
-        alpha = 0.5 * np.log((1 - epsilon) / (epsilon))
-
-        return (
-            best_idx,
-            best_thresholds[best_idx],
-            best_directions[best_idx],
-            best_errors[best_idx],
-            alpha,
-        )
-
-    def find_weight_update_array(self, feature_idx, threshold, direction):
-        """
-        Find the indexes of the samples that are classified incorrectly.
-        "+1" for incorrectly classified samples; "-1" for correctly classified samples.
-
-        Args:
-            feature_idx (int): Index of the feature to evaluate.
-            threshold (float): Threshold value for the feature evaluation.
-            direction (int): 0 for "lower than or equal to", 1 for "greater than".
-
-        Returns:
-            numpy.ndarray: "+1" for incorrect samples; "-1" for correct ones
-        """
-
-        # Get the feature evaluation for the given feature index
-        feature_eval = self.feature_eval_matrix[feature_idx]
-
-        # Initialize an array assuming all wrong (+1) predictions
-        weight_arr = np.ones(feature_eval.shape[0], dtype=int)
-
-        # Compact version
-        prediction_indexes = (
-            (feature_eval <= threshold)
-            if direction == 0
-            else (feature_eval > threshold)
-        )
-
-        # Convert boolean indexes to -1 or 1
-        prediction_indexes = prediction_indexes.astype(int) * 2 - 1
-
-        # Set the weight array to 1 for the samples that are classified incorrectly
-        right_indexes = prediction_indexes == self.sample_labels
-        weight_arr[right_indexes] = -1
-
-        return weight_arr
-
-    def weight_update(self, weight_update_array, alpha):
-        """
-        Update and normalize sample weights according to the AdaBoost algorithm.
-
-        Args:
-            weight_update_array (numpy.ndarray): +1 for incorrect samples; -1 for correct ones
-            alpha (float): Amount of say
-        """
-
-        # Update the sample weights
-        self.sample_weights *= np.exp(alpha * weight_update_array)
-        # Normalize the sample weights
-        self.sample_weights /= np.sum(self.sample_weights)
-
-    def crop_negatives(self, predictions):
-        """
-        Updates the feature evaluation matrix, sample weights and labels
-        to only include the samples classified as positive.
-        Sort the feature evaluation matrix again after cropping.
-
-        Args:
-            predictions (numpy.ndarray): Array of predictions for the current stage.
-        """
-
-        # Find the samples that are classified as positive (1) by the majority vote
-        positive_samples = predictions == 1
-
-        # Remove the samples, weights and labels classified as negative by the majority vote
-        self.feature_eval_matrix = self.feature_eval_matrix[:, positive_samples]
-        self.sample_weights = self.sample_weights[positive_samples]
-        self.sample_labels = self.sample_labels[positive_samples]
-
-        # Sort again
-        self.sorted_indices = np.argsort(self.feature_eval_matrix, axis=1)
-
-    def get_statistics(self, predictions):
-        """
-        Return statistics from the given predictions.
-
-        Args:
-            predictions (numpy.ndarray): Array of predictions for the current stage.
-
-        Returns:
-            correct_predictions (float): Percentage of correct predictions.
-            true_positives (float): Percentage of true positives.
-            true_negatives (float): Percentage of true negatives.
-        """
-
-        correct_predictions = np.mean(predictions == self.sample_labels) * 100
-        true_positives = np.mean(predictions[self.sample_labels == 1] == 1) * 100
-        true_negatives = (
-            np.mean(predictions[self.sample_labels == -1] == -1) * 100
-            if -1
-            in self.sample_labels  # Check if not all negative samples were cropped
-            else 100.0
-        )
-
-        return correct_predictions, true_positives, true_negatives
-
-    def print_statistics(
-        self, stage_idx: int, corr_pred: float, true_pos: float, true_neg: float
-    ):
-        """
-        Print statistics for this stage
-
-        Args:
-            stage_idx (int): Stage index
-            corr_pred (float): Correct predictions
-            true_pos (float): True positives
-            true_neg (float): True negatives
-        """
-
-        print(f"\nStatistics for stage {stage_idx + 1}:\n")
-
-        print(
-            f"Percentage of correct predictions at stage {stage_idx}:",
-            corr_pred,
-            "%",
-        )
-        print(
-            f"True positive percentage at stage {stage_idx}:",
-            true_pos,
-            "%",
-        )
-
-        print(
-            f"True negative percentage at stage {stage_idx}:",
-            true_neg,
-            "%\n",
-        )
 
     def train(self):
         """
@@ -510,18 +552,25 @@ class AdaBoost:
 
                 # Find the best feature
                 best_feature_idx, best_threshold, best_direction, best_error, alpha = (
-                    self.find_best_feature()
+                    find_best_feature_numba(
+                        feature_eval_matrix=self.feature_eval_matrix,
+                        sample_weights=self.sample_weights,
+                        sample_labels=self.sample_labels,
+                        sorted_indices=self.sorted_indices,
+                    )
                 )
 
                 # Get the weight-update array based on the best feature
-                weight_update_array = self.find_weight_update_array(
-                    feature_idx=best_feature_idx,
+                weight_update_array = find_weight_update_array_numba(
+                    feature_eval=self.feature_eval_matrix[best_feature_idx],
+                    sample_labels=self.sample_labels,
                     threshold=best_threshold,
                     direction=best_direction,
                 )
 
                 # Update weights
-                self.weight_update(
+                weight_update_numba(
+                    sample_weights=self.sample_weights,
                     weight_update_array=weight_update_array,
                     alpha=alpha,
                 )
@@ -548,13 +597,29 @@ class AdaBoost:
             self.trained_classifier.append(stage_classifier)
 
             # Get this stage predictions
-            predictions = self.get_predictions(stage_idx=stage_i)
-
+            predictions = get_predictions_numba(
+                feature_eval_matrix=self.feature_eval_matrix,
+                feature_idxs=np.array(
+                    [x["feature_idx"] for x in stage_classifier], dtype=np.int32
+                ),
+                thresholds=np.array(
+                    [x["threshold"] for x in stage_classifier], dtype=np.float64
+                ),
+                directions=np.array(
+                    [x["direction"] for x in stage_classifier], dtype=np.int32
+                ),
+                alphas=np.array(
+                    [x["alpha"] for x in stage_classifier], dtype=np.float64
+                ),
+            )
             # Get statistics for this stage
-            corr, tp, tn = self.get_statistics(predictions=predictions)
+            corr, tp, tn = get_statistics_numba(
+                predictions=predictions,
+                sample_labels=self.sample_labels,
+            )
 
             # Print statistics
-            self.print_statistics(
+            print_statistics(
                 stage_idx=stage_i, corr_pred=corr, true_pos=tp, true_neg=tn
             )
 
@@ -564,7 +629,18 @@ class AdaBoost:
                 break
 
             # Remove the samples and weights that are classified as negative by the majority vote
-            self.crop_negatives(predictions=predictions)
+            print("Cropping negatives from the feature evaluation matrix...")
+            (
+                self.feature_eval_matrix,
+                self.sample_weights,
+                self.sample_labels,
+                self.sorted_indices,
+            ) = crop_negatives_numba(
+                feature_eval_matrix=self.feature_eval_matrix,
+                sample_weights=self.sample_weights,
+                sample_labels=self.sample_labels,
+                predictions=predictions,
+            )
             print("Cropped negatives from the feature evaluation matrix.\n")
 
         # Save the trained classifier to a file
@@ -594,7 +670,7 @@ if __name__ == "__main__":
     SAMPLE_LABELS = np.array([1, -1, -1, 1, 1])
 
     # Try a big dataset
-    # FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data(
+    # FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data_numba(
     #     size_x=5000, size_y=10000, bias_strenght=40
     # )
 
