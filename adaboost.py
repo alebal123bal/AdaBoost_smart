@@ -190,6 +190,41 @@ def find_best_feature_numba(
     )
 
 
+@njit
+def find_weight_update_array_numba(feature_eval, sample_labels, threshold, direction):
+    """
+    Find the indexes of the samples that are classified incorrectly.
+    "+1" for incorrectly classified samples; "-1" for correctly classified samples.
+
+    Args:
+        feature_eval (np.ndarray): Evaluations of the feature for all samples.
+        sample_labels (np.ndarray): True labels for the samples.
+        threshold (float): Threshold value for the feature evaluation.
+        direction (int): 0 for "lower than or equal to", 1 for "greater than".
+
+    Returns:
+        np.ndarray: "+1" for incorrect samples; "-1" for correct ones.
+    """
+    n_samples = feature_eval.shape[0]
+    weight_arr = np.ones(n_samples, dtype=np.int8)
+
+    # Iterate through each sample to compute predictions and weights
+    for i in range(n_samples):
+        # Perform threshold comparison based on direction
+        if direction == 0:  # "lower than or equal to"
+            prediction = 1 if feature_eval[i] <= threshold else -1
+        else:  # "greater than"
+            prediction = 1 if feature_eval[i] > threshold else -1
+
+        # Mark as correct (-1) or incorrect (+1)
+        if prediction == sample_labels[i]:
+            weight_arr[i] = -1  # Correctly classified
+        else:
+            weight_arr[i] = 1  # Incorrectly classified
+
+    return weight_arr
+
+
 class AdaBoost:
     """
     Optimized AdaBoost classifier using numpy.
@@ -303,42 +338,6 @@ class AdaBoost:
         return predictions
 
     ## Training methods
-
-    def find_weight_update_array(self, feature_idx, threshold, direction):
-        """
-        Find the indexes of the samples that are classified incorrectly.
-        "+1" for incorrectly classified samples; "-1" for correctly classified samples.
-
-        Args:
-            feature_idx (int): Index of the feature to evaluate.
-            threshold (float): Threshold value for the feature evaluation.
-            direction (int): 0 for "lower than or equal to", 1 for "greater than".
-
-        Returns:
-            numpy.ndarray: "+1" for incorrect samples; "-1" for correct ones
-        """
-
-        # Get the feature evaluation for the given feature index
-        feature_eval = self.feature_eval_matrix[feature_idx]
-
-        # Initialize an array assuming all wrong (+1) predictions
-        weight_arr = np.ones(feature_eval.shape[0], dtype=np.int8)
-
-        # Compact version
-        prediction_indexes = (
-            (feature_eval <= threshold)
-            if direction == 0
-            else (feature_eval > threshold)
-        )
-
-        # Convert boolean indexes to -1 or 1
-        prediction_indexes = prediction_indexes.astype(int) * 2 - 1
-
-        # Set the weight array to 1 for the samples that are classified incorrectly
-        right_indexes = prediction_indexes == self.sample_labels
-        weight_arr[right_indexes] = -1
-
-        return weight_arr
 
     def weight_update(self, weight_update_array, alpha):
         """
@@ -457,8 +456,9 @@ class AdaBoost:
                 )
 
                 # Get the weight-update array based on the best feature
-                weight_update_array = self.find_weight_update_array(
-                    feature_idx=best_feature_idx,
+                weight_update_array = find_weight_update_array_numba(
+                    feature_eval=self.feature_eval_matrix[best_feature_idx],
+                    sample_labels=self.sample_labels,
                     threshold=best_threshold,
                     direction=best_direction,
                 )
@@ -537,9 +537,9 @@ if __name__ == "__main__":
     SAMPLE_LABELS = np.array([1, -1, -1, 1, 1])
 
     # Try a big dataset
-    FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data_numba(
-        size_x=5000, size_y=10000, bias_strenght=40
-    )
+    # FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data_numba(
+    #     size_x=5000, size_y=10000, bias_strenght=40
+    # )
 
     print("Feature Evaluation Matrix:")
     print(FEATURE_EVAL_MATRIX)
