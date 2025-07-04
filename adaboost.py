@@ -117,6 +117,27 @@ def generate_random_data_numba(size_x=5000, size_y=20000, bias_strenght=20):
 def find_best_feature_numba(
     feature_eval_matrix, sample_weights, sample_labels, sorted_indices
 ):
+    """
+    Find the best feature for the AdaBoost classifier using Numba.
+    This function computes the best threshold and direction for each feature
+    based on the weighted errors, and returns the feature index, threshold,
+    direction, error, and alpha value.
+
+    Args:
+        feature_eval_matrix (numpy.ndarray): Matrix of feature evaluations.
+        sample_weights (numpy.ndarray): Weights for each sample.
+        sample_labels (numpy.ndarray): Labels for each sample.
+        sorted_indices (numpy.ndarray): Precomputed sorted indices for each feature evaluation.
+
+    Returns:
+        tuple: A tuple containing:
+            - best_idx (int): Index of the best feature.
+            - best_threshold (float): Best threshold for the feature.
+            - best_direction (int): Direction of the threshold (0 for <=, 1 for >).
+            - best_error (float): Best error for the feature.
+            - alpha (float): Alpha value for the feature.
+    """
+
     n_features = feature_eval_matrix.shape[0]
     n_samples = feature_eval_matrix.shape[1]
 
