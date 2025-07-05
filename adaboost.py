@@ -470,34 +470,32 @@ def get_statistics_numba(predictions, sample_labels):
     return correct_predictions, true_positives, true_negatives
 
 
-def print_statistics(
-    stage_idx: int, corr_pred: float, true_pos: float, true_neg: float
-):
+def print_statistics(stage, corr_pred: float, true_pos: float, true_neg: float):
     """
     Print statistics for this stage
 
     Args:
-        stage_idx (int): Stage index
+        stage: Stage index
         corr_pred (float): Correct predictions
         true_pos (float): True positives
         true_neg (float): True negatives
     """
 
-    print(f"\nStatistics for stage {stage_idx + 1}:\n")
+    print(f"\nStatistics for stage {stage}:\n")
 
     print(
-        f"Percentage of correct predictions at stage {stage_idx + 1}:",
+        f"Percentage of correct predictions at stage {stage}:",
         corr_pred,
         "%",
     )
     print(
-        f"True positive percentage at stage {stage_idx + 1}:",
+        f"True positive percentage at stage {stage}:",
         true_pos,
         "%",
     )
 
     print(
-        f"True negative percentage at stage {stage_idx + 1}:",
+        f"True negative percentage at stage {stage}:",
         true_neg,
         "%\n",
     )
@@ -629,9 +627,7 @@ class AdaBoost:
             )
 
             # Print statistics
-            print_statistics(
-                stage_idx=stage_i, corr_pred=corr, true_pos=tp, true_neg=tn
-            )
+            print_statistics(stage=stage_i, corr_pred=corr, true_pos=tp, true_neg=tn)
 
             # If the correct predictions are 100% for this stage, then stop early
             if corr > 99.9:
@@ -735,7 +731,7 @@ class ClassifierScoreCheck:
 
         # Print statistics
         print_statistics(
-            stage_idx=0,
+            stage="TOTAL",
             corr_pred=correct_predictions,
             true_pos=true_positives,
             true_neg=true_negatives,
