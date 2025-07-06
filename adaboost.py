@@ -269,9 +269,11 @@ def weight_update_numba(sample_weights, weight_update_array, alpha):
     """
     n_samples = sample_weights.shape[0]
 
+    aggressivness = 0.4
+
     # Update sample weights
     for i in range(n_samples):
-        sample_weights[i] *= np.exp(alpha * weight_update_array[i])
+        sample_weights[i] *= np.exp(aggressivness * alpha * weight_update_array[i])
 
     # Normalize sample weights
     total_weight = np.sum(sample_weights)
