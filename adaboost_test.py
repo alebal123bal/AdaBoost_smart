@@ -49,6 +49,7 @@ if __name__ == "__main__":
         sample_weights=SAMPLE_WEIGHTS,
         sample_labels=SAMPLE_LABELS,
         n_stages=6,
+        aggressivness=0.5,
     )
 
     my_trainer.train()
