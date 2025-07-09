@@ -59,7 +59,7 @@ def save_pickle_obj(obj, filename="trained_classifier.pkl"):
     # Save the object to a file
     with open(os.path.join(cwd, folder, filename), "wb") as f:
         pickle.dump(obj, f)
-    print(f"Classifier saved to {os.path.join(cwd, folder, filename)}")
+    print(f"💾 Classifier saved to {os.path.join(cwd, folder, filename)}")
 
 
 def load_pickle_obj(filename="trained_classifier.pkl"):
@@ -77,6 +77,7 @@ def load_pickle_obj(filename="trained_classifier.pkl"):
         if obj is None:
             raise ValueError(f"File '{filename}' is empty or corrupted.")
 
+        print(f"📂 Classifier loaded from {filename}")
         return obj
 
     except FileNotFoundError as exc:
@@ -516,21 +517,21 @@ def print_statistics(stage, corr_pred: float, true_pos: float, true_neg: float):
         true_neg (float): True negatives
     """
 
-    print(f"\nStatistics for stage {stage}:\n")
+    print(f"\n📊 Statistics for stage {stage}:\n")
 
     print(
-        f"Percentage of correct predictions at stage {stage}:",
+        f"⚖️ Percentage of correct predictions at stage {stage}:",
         corr_pred,
         "%",
     )
     print(
-        f"True positive percentage at stage {stage}:",
+        f"📈 True positive percentage at stage {stage}:",
         true_pos,
         "%",
     )
 
     print(
-        f"True negative percentage at stage {stage}:",
+        f"📈 True negative percentage at stage {stage}:",
         true_neg,
         "%\n",
     )
@@ -563,18 +564,18 @@ class AdaBoost:
         self.aggressivness = kwargs.get("aggressivness", 1.0)
 
         # Allocate memory for the feature evaluation matrix, sample weights and labels
-        print("Allocating memory for the AdaBoost classifier...")
+        print("🔄 Allocating memory for the AdaBoost classifier...")
         self.feature_eval_matrix = feature_eval_matrix
         self.sample_weights = np.array(sample_weights)
         self.sample_labels = np.array(sample_labels)
-        print("Done allocating memory for the AdaBoost classifier.\n")
+        print("✅ Done allocating memory for the AdaBoost classifier.\n")
 
         # Precomputed sorted indices for each feature evaluation
-        print("Precomputing sorted indices for feature evaluations...")
+        print("🔄 Precomputing sorted indices for feature evaluations...")
         self.sorted_indices = sort_feature_matrix_numba(
             feature_eval_matrix=self.feature_eval_matrix
         )
-        print("Done precomputing sorted indices for feature evaluations.\n")
+        print("✅ Done precomputing sorted indices for feature evaluations.\n")
 
         # Placeholder for the trained classifier
         self.trained_classifier = []
@@ -585,13 +586,13 @@ class AdaBoost:
         """
 
         for stage_i in range(self.n_stages):
-            print(f"Training stage {stage_i + 1} of {self.n_stages}...")
+            print(f"🔄 Training stage {stage_i + 1} of {self.n_stages}...\n")
 
             stage_classifier = []  # Reset this stage's classifier
 
             for x in range(2 + 2 * stage_i):
                 print(
-                    f"Finding best feature for stage {stage_i + 1}, iteration {x + 1}..."
+                    f"🔍 Finding best feature for stage {stage_i + 1}, iteration {x + 1}..."
                 )
 
                 # Find the best feature
@@ -633,9 +634,9 @@ class AdaBoost:
 
                 print(
                     f"Stage {stage_i + 1}, iteration {x + 1} completed.\n"
-                    f"Feature index: {best_feature_idx}, Threshold: {best_threshold}, "
+                    f"📏 Feature index: {best_feature_idx}, Threshold: {best_threshold}, "
                     f"Direction: {'>' if best_direction == 1 else '<='}, Alpha: {alpha:.4f}, "
-                    f"Error: {best_error}"
+                    f"Error: {best_error}\n"
                 )
 
             # Append this stage to the full classifier's list of stages
@@ -669,11 +670,13 @@ class AdaBoost:
 
             # If the correct predictions are 100% for this stage, then stop early
             if corr > 99.9:
-                print(f"Perfect stage {stage_i + 1}. Stopping here.\n")
+                print(f"🎉 Perfect stage {stage_i + 1}. Stopping here.\n")
                 break
 
             # Remove the samples and weights that are classified as negative by the majority vote
-            print("Cropping negatives from the feature evaluation matrix...")
+            print(
+                "🔄 Cropping negatives from the feature evaluation matrix and sorting again..."
+            )
             (
                 self.feature_eval_matrix,
                 self.sample_weights,
@@ -685,7 +688,7 @@ class AdaBoost:
                 sample_labels=self.sample_labels,
                 predictions=predictions,
             )
-            print("Cropped negatives from the feature evaluation matrix.\n")
+            print("✅ Cropped negatives from the feature evaluation matrix.\n")
 
         # Save the trained classifier to a file
         save_pickle_obj(
@@ -757,10 +760,10 @@ class ClassifierScoreCheck:
         if self.sample_labels is None:
             raise ValueError("Labels are not provided for analysis.")
 
-        print("\nAnalyzing predictions...")
+        print("\n🔄 Analyzing predictions...")
         # Get overall predictions
         predictions = self.overall_predict()
-        print("Overall predictions computed.\n")
+        print("✅ Overall predictions computed.\n")
 
         # Get statistics
         correct_predictions, true_positives, true_negatives = get_statistics_numba(

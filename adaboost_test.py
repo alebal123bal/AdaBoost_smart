@@ -40,7 +40,7 @@ if __name__ == "__main__":
     print("Sample Labels:")
     print(SAMPLE_LABELS)
 
-    print("\nTraining AdaBoost Classifier...\n")
+    print("\n🔄 Training AdaBoost Classifier...\n")
 
     start_time = time.time()
 
@@ -54,9 +54,9 @@ if __name__ == "__main__":
 
     my_trainer.train()
 
-    print("\nTraining completed.\n")
+    print("\n🎯 Training completed.\n")
 
-    print(f"\nTotal training time: {(time.time() - start_time)} seconds")
+    print(f"\n⏱️ Total training time: {(time.time() - start_time)} seconds")
 
     my_classifier = ClassifierScoreCheck(
         feature_eval_matrix=FEATURE_EVAL_MATRIX,
