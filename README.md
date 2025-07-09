@@ -208,13 +208,13 @@ VS Code launch configurations:
 
 ### Training Times
 
-Tested on Intel i7-8700K with 32GB RAM:
+Tested on Intel(R) N95- 2.70GHz Max with 16GB RAM:
 
-| Dataset Size | Features | Samples | Time (Debug) | Time (Optimized) |
-|--------------|----------|---------|--------------|------------------|
-| Small | 1K | 5K | ~5 minutes | ~30 seconds |
-| Medium | 50K | 15K | ~2 hours | ~8 minutes |
-| Large | 190K | 15K | ~8 hours | ~31 minutes |
+| Dataset Size | Features | Samples | Time (Optimized)|
+|--------------|----------|---------|--------------|
+| Small | 1K | 5K | ~30 seconds |
+| Medium | 50K | 15K | ~2 minutes |
+| Large | 110K | 10K | ~8 minutes |
 
 ### Complexity Analysis
 

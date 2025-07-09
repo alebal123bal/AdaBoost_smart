@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     # Try a big dataset
     FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data_numba(
-        size_x=3000, size_y=10000, bias_strenght=40
+        size_x=1000, size_y=5000, bias_strenght=40
     )
 
     print("Feature Evaluation Matrix:")
