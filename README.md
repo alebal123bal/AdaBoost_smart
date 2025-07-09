@@ -213,7 +213,7 @@ Tested on Intel(R) N95- 2.70GHz Max with 16GB RAM:
 | Dataset Size | Features | Samples | Time (Optimized)|
 |--------------|----------|---------|--------------|
 | Small | 1K | 5K | ~30 seconds |
-| Medium | 50K | 15K | ~2 minutes |
+| Medium | 50K | 5K | ~2 minutes |
 | Large | 110K | 10K | ~8 minutes |
 
 ### Complexity Analysis
