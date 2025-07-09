@@ -8,7 +8,41 @@ Version: 2.0.0
 import os
 import pickle
 import numpy as np
-from numba import njit, prange
+
+# Debug flag - setup from launch configuration or environment variable
+DEBUG_MODE = os.environ.get("ADABOOST_DEBUG", "False").lower() in ("true", "1", "yes")
+
+# Conditional imports and setup
+if DEBUG_MODE:
+    print("🐛 DEBUG MODE - Numba disabled")
+
+    # Define dummy decorators that do nothing
+    def njit(*args, **kwargs):  # pylint: disable=unused-argument
+        """
+        Dummy njit decorator for debugging purposes.
+        """
+
+        def decorator(func):
+            """
+            Dummy decorator function that returns the function as is.
+            """
+            return func
+
+        if len(args) == 1 and callable(args[0]):
+            # Called as @njit without parentheses
+            return args[0]
+        # Called as @njit() or @njit(parallel=True)
+        return decorator
+
+    def prange(n):
+        """
+        Dummy prange function for debugging purposes.
+        """
+        return range(n)
+
+else:
+    print("🚀 PRODUCTION MODE - Numba enabled")
+    from numba import njit, prange
 
 
 ## Pickle utils methods

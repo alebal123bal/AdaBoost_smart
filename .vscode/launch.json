@@ -6,7 +6,10 @@
             "type": "debugpy",
             "request": "launch",
             "module": "adaboost_test",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "env": {
+                "ADABOOST_DEBUG": "true"
+            }
         },
         {
             "name": "Run AdaBoost",
