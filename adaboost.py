@@ -255,7 +255,7 @@ def find_weight_update_array_numba(feature_eval, sample_labels, threshold, direc
 
 
 @njit
-def weight_update_numba(sample_weights, weight_update_array, alpha):
+def weight_update_numba(sample_weights, weight_update_array, alpha, aggressivness=1.0):
     """
     Update and normalize sample weights according to the AdaBoost algorithm (Numba-optimized).
 
@@ -263,13 +263,12 @@ def weight_update_numba(sample_weights, weight_update_array, alpha):
         sample_weights (numpy.ndarray): Array of sample weights to be updated (in-place).
         weight_update_array (numpy.ndarray): +1 for incorrect samples; -1 for correct ones.
         alpha (float): Amount of say.
+        aggressivness (float, optional): Aggressiveness of the update. Defaults to 1.0.
 
     Returns:
         None: The sample_weights array is updated in-place.
     """
     n_samples = sample_weights.shape[0]
-
-    aggressivness = 0.4
 
     # Update sample weights
     for i in range(n_samples):
@@ -514,6 +513,7 @@ class AdaBoost:
         sample_weights: np.array,
         sample_labels: np.array,
         n_stages: int,
+        **kwargs,
     ):
         """
         Initialize the AdaBoost classifier.
@@ -526,6 +526,7 @@ class AdaBoost:
         """
 
         self.n_stages = n_stages
+        self.aggressivness = kwargs.get("aggressivness", 1.0)
 
         # Allocate memory for the feature evaluation matrix, sample weights and labels
         print("Allocating memory for the AdaBoost classifier...")
@@ -582,6 +583,7 @@ class AdaBoost:
                     sample_weights=self.sample_weights,
                     weight_update_array=weight_update_array,
                     alpha=alpha,
+                    aggressivness=self.aggressivness,
                 )
 
                 # Append the feature to the stage's list of features
