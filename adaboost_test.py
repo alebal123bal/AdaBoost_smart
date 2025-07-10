@@ -50,6 +50,7 @@ if __name__ == "__main__":
         sample_labels=SAMPLE_LABELS,
         n_stages=6,
         aggressivness=0.5,
+        feature_per_stage=2,  # Number of features to select per stage
     )
 
     my_trainer.train()

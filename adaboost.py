@@ -562,6 +562,7 @@ class AdaBoost:
 
         self.n_stages = n_stages
         self.aggressivness = kwargs.get("aggressivness", 1.0)
+        self.feature_per_stage = kwargs.get("feature_per_stage", 2)
 
         # Allocate memory for the feature evaluation matrix, sample weights and labels
         print("🔄 Allocating memory for the AdaBoost classifier...")
@@ -590,7 +591,7 @@ class AdaBoost:
 
             stage_classifier = []  # Reset this stage's classifier
 
-            for x in range(2 + 2 * stage_i):
+            for x in range(self.feature_per_stage + self.feature_per_stage * stage_i):
                 print(
                     f"🔍 Finding best feature for stage {stage_i + 1}, iteration {x + 1}..."
                 )
