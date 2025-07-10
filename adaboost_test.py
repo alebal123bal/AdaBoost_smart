@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     # Try a big dataset
     FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data_numba(
-        size_x=1000, size_y=5000, bias_strenght=40
+        size_x=2000, size_y=15000, bias_strenght=40
     )
 
     print("Feature Evaluation Matrix:")
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         sample_labels=SAMPLE_LABELS,
         n_stages=6,
         aggressivness=0.5,
-        feature_per_stage=2,  # Number of features to select per stage
+        feature_per_stage=4,  # Number of features to select per stage
     )
 
     my_trainer.train()

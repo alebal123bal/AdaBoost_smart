@@ -558,6 +558,8 @@ class AdaBoost:
             sample_weights (numpy.ndarray): Weights for each sample.
             sample_labels (numpy.ndarray): Labels for each sample.
             n_stages (int): Number of stages for the AdaBoost algorithm.
+            aggressivness (float, optional): Aggressiveness of the weight update. Defaults to 1.0.
+            feature_per_stage (int, optional): Number of features to select per stage. Defaults to 2.
         """
 
         self.n_stages = n_stages
