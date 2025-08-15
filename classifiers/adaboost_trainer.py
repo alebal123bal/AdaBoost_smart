@@ -11,8 +11,7 @@ from utils.numba_setup import njit, prange
 from utils.statistics import Statistics
 
 
-## Init methods
-@njit  # TODO: make this run in parallel
+@njit(parallel=True)
 def sort_feature_matrix(feature_eval_matrix):
     """
     Perform row-wise argsort on the feature evaluation matrix using Numba.
@@ -26,14 +25,13 @@ def sort_feature_matrix(feature_eval_matrix):
     n_features, n_samples = feature_eval_matrix.shape
     sorted_indices = np.empty((n_features, n_samples), dtype=np.uint32)
 
-    for i in range(n_features):
+    for i in prange(n_features):
         # Perform argsort on each row and cast to uint32
         sorted_indices[i] = np.argsort(feature_eval_matrix[i]).astype(np.uint32)
 
     return sorted_indices
 
 
-## Training methods
 @njit(parallel=True)
 def find_best_feature(
     feature_eval_matrix, sample_weights, sample_labels, sorted_indices
