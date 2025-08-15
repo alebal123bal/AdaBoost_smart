@@ -13,7 +13,7 @@ from utils.statistics import Statistics
 
 ## Init methods
 @njit  # TODO: make this run in parallel
-def sort_feature_matrix_numba(feature_eval_matrix):
+def sort_feature_matrix(feature_eval_matrix):
     """
     Perform row-wise argsort on the feature evaluation matrix using Numba.
 
@@ -35,7 +35,7 @@ def sort_feature_matrix_numba(feature_eval_matrix):
 
 ## Training methods
 @njit(parallel=True)
-def find_best_feature_numba(
+def find_best_feature(
     feature_eval_matrix, sample_weights, sample_labels, sorted_indices
 ):
     """
@@ -112,7 +112,7 @@ def find_best_feature_numba(
 
 
 @njit
-def find_weight_update_array_numba(feature_eval, sample_labels, threshold, direction):
+def find_weight_update_array(feature_eval, sample_labels, threshold, direction):
     """
     Find the indexes of the samples that are classified incorrectly.
     "+1" for incorrectly classified samples; "-1" for correctly classified samples.
@@ -147,7 +147,7 @@ def find_weight_update_array_numba(feature_eval, sample_labels, threshold, direc
 
 
 @njit
-def weight_update_numba(sample_weights, weight_update_array, alpha, aggressivness=1.0):
+def weight_update(sample_weights, weight_update_array, alpha, aggressivness=1.0):
     """
     Update and normalize sample weights according to the AdaBoost algorithm (Numba-optimized).
 
@@ -194,7 +194,7 @@ def unpack_stage(feature_eval_matrix_dtype, stage):
 
 
 @njit
-def majority_vote_numba(
+def majority_vote(
     feature_eval_matrix, feature_idxs, thresholds, directions, alphas, sample_idx
 ):
     """
@@ -236,9 +236,7 @@ def majority_vote_numba(
 
 
 @njit
-def get_predictions_numba(
-    feature_eval_matrix, feature_idxs, thresholds, directions, alphas
-):
+def get_predictions(feature_eval_matrix, feature_idxs, thresholds, directions, alphas):
     """
     Compute predictions for all samples using majority voting.
 
@@ -256,7 +254,7 @@ def get_predictions_numba(
     predictions = np.empty(n_samples, dtype=np.int8)
 
     for sample_idx in range(n_samples):
-        predictions[sample_idx] = majority_vote_numba(
+        predictions[sample_idx] = majority_vote(
             feature_eval_matrix,
             feature_idxs,
             thresholds,
@@ -269,9 +267,7 @@ def get_predictions_numba(
 
 
 @njit
-def crop_negatives_numba(
-    feature_eval_matrix, sample_weights, sample_labels, predictions
-):
+def crop_negatives(feature_eval_matrix, sample_weights, sample_labels, predictions):
     """
     Update the feature evaluation matrix, sample weights, and labels
     to only include samples classified as positive. Sort the feature evaluation
@@ -312,9 +308,7 @@ def crop_negatives_numba(
             positive_index += 1
 
     # Sort the updated feature evaluation matrix row-wise
-    sorted_indices = sort_feature_matrix_numba(
-        feature_eval_matrix=new_feature_eval_matrix
-    )
+    sorted_indices = sort_feature_matrix(feature_eval_matrix=new_feature_eval_matrix)
 
     return (
         new_feature_eval_matrix,
@@ -362,7 +356,7 @@ class AdaBoostTrainer:
 
         # Precomputed sorted indices for each feature evaluation
         print("🔄 Precomputing sorted indices for feature evaluations...")
-        self.sorted_indices = sort_feature_matrix_numba(
+        self.sorted_indices = sort_feature_matrix(
             feature_eval_matrix=self.feature_eval_matrix
         )
         print("✅ Done precomputing sorted indices for feature evaluations.\n")
@@ -387,7 +381,7 @@ class AdaBoostTrainer:
 
                 # Find the best feature
                 best_feature_idx, best_threshold, best_direction, best_error, alpha = (
-                    find_best_feature_numba(
+                    find_best_feature(
                         feature_eval_matrix=self.feature_eval_matrix,
                         sample_weights=self.sample_weights,
                         sample_labels=self.sample_labels,
@@ -396,7 +390,7 @@ class AdaBoostTrainer:
                 )
 
                 # Get the weight-update array based on the best feature
-                weight_update_array = find_weight_update_array_numba(
+                weight_update_array = find_weight_update_array(
                     feature_eval=self.feature_eval_matrix[best_feature_idx],
                     sample_labels=self.sample_labels,
                     threshold=best_threshold,
@@ -404,7 +398,7 @@ class AdaBoostTrainer:
                 )
 
                 # Update weights
-                weight_update_numba(
+                weight_update(
                     sample_weights=self.sample_weights,
                     weight_update_array=weight_update_array,
                     alpha=alpha,
@@ -441,7 +435,7 @@ class AdaBoostTrainer:
             ) = unpack_stage(self.feature_eval_matrix.dtype, stage_classifier)
 
             # Get this stage predictions
-            predictions = get_predictions_numba(
+            predictions = get_predictions(
                 feature_eval_matrix=self.feature_eval_matrix,
                 feature_idxs=feature_idxs,
                 thresholds=thresholds,
@@ -474,7 +468,7 @@ class AdaBoostTrainer:
                 self.sample_weights,
                 self.sample_labels,
                 self.sorted_indices,
-            ) = crop_negatives_numba(
+            ) = crop_negatives(
                 feature_eval_matrix=self.feature_eval_matrix,
                 sample_weights=self.sample_weights,
                 sample_labels=self.sample_labels,
