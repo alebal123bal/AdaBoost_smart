@@ -5,7 +5,7 @@ Classifier for checking the scores of the trained AdaBoost classifier.
 import numpy as np
 from utils.io_operations import PickleUtils
 from utils.statistics import Statistics
-from adaboost import unpack_stage, get_predictions_numba
+from classifiers.adaboost_trainer import unpack_stage, get_predictions_numba
 
 
 class ClassifierScoreCheck:
