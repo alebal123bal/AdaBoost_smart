@@ -3,9 +3,17 @@ Classifier for checking the scores of the trained AdaBoost classifier.
 """
 
 import numpy as np
-from utils.io_operations import PickleUtils
-from utils.statistics import Statistics
-from classifiers.adaboost_trainer import unpack_stage, get_predictions
+
+try:
+    # for package use
+    from ..utils.io_operations import PickleUtils
+    from ..utils.statistics import Statistics
+    from ..classifiers.adaboost_trainer import unpack_stage, get_predictions
+except ImportError:
+    # for standalone usage
+    from utils.io_operations import PickleUtils
+    from utils.statistics import Statistics
+    from classifiers.adaboost_trainer import unpack_stage, get_predictions
 
 
 class ClassifierScoreCheck:

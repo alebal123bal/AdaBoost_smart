@@ -6,9 +6,17 @@ Version: 3.0.0
 """
 
 import numpy as np
-from utils.io_operations import PickleUtils
-from utils.numba_setup import njit, prange
-from utils.statistics import Statistics
+
+try:
+    # for package use
+    from ..utils.io_operations import PickleUtils
+    from ..utils.numba_setup import njit, prange
+    from ..utils.statistics import Statistics
+except ImportError:
+    # for standalone usage
+    from utils.io_operations import PickleUtils
+    from utils.numba_setup import njit, prange
+    from utils.statistics import Statistics
 
 
 @njit(parallel=True)
