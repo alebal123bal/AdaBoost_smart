@@ -5,7 +5,7 @@
             "name": "Debug AdaBoost",
             "type": "debugpy",
             "request": "launch",
-            "module": "adaboost_test",
+            "module": "test.adaboost_test",
             "console": "integratedTerminal",
             "env": {
                 "ADABOOST_DEBUG": "true"
@@ -15,7 +15,7 @@
             "name": "Run AdaBoost",
             "type": "debugpy",
             "request": "launch",
-            "module": "adaboost_test",
+            "module": "test.adaboost_test",
             "console": "integratedTerminal",
             "justMyCode": false,
             "stopOnEntry": false

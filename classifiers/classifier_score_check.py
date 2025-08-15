@@ -83,7 +83,7 @@ class ClassifierScoreCheck:
 
         # Print statistics
         Statistics.print_statistics(
-            stage_index=-1,
+            stage_index=777,
             corr_pred=correct_predictions,
             true_pos=true_positives,
             true_neg=true_negatives,
