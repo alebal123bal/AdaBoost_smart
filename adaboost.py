@@ -2,86 +2,12 @@
 Optimized AdaBoost numpy implementation. Now with numba.
 Author: Alessandro Balzan
 Date: 2025-07-04
-Version: 2.0.0
+Version: 3.0.0
 """
 
-import os
-import pickle
 import numpy as np
-
-# Debug flag - setup from launch configuration or environment variable
-DEBUG_MODE = os.environ.get("ADABOOST_DEBUG", "False").lower() in ("true", "1", "yes")
-
-# Conditional imports and setup
-if DEBUG_MODE:
-    print("🐛 DEBUG MODE - Numba disabled")
-
-    # Define dummy decorators that do nothing
-    def njit(*args, **kwargs):  # pylint: disable=unused-argument
-        """
-        Dummy njit decorator for debugging purposes.
-        """
-
-        def decorator(func):
-            """
-            Dummy decorator function that returns the function as is.
-            """
-            return func
-
-        if len(args) == 1 and callable(args[0]):
-            # Called as @njit without parentheses
-            return args[0]
-        # Called as @njit() or @njit(parallel=True)
-        return decorator
-
-    def prange(n):
-        """
-        Dummy prange function for debugging purposes.
-        """
-        return range(n)
-
-else:
-    print("🚀 PRODUCTION MODE - Numba enabled")
-    from numba import njit, prange
-
-
-## Pickle utils methods
-def save_pickle_obj(obj, filename="trained_classifier.pkl"):
-    """
-    Save the classifier using pickle
-    """
-    # Get cwd
-    cwd = os.getcwd()
-    # Create folder if it does not exist
-    folder = "_pickle_folder"
-    if not os.path.exists(os.path.join(cwd, folder)):
-        os.makedirs(os.path.join(cwd, folder))
-    # Save the object to a file
-    with open(os.path.join(cwd, folder, filename), "wb") as f:
-        pickle.dump(obj, f)
-    print(f"💾 Classifier saved to {os.path.join(cwd, folder, filename)}")
-
-
-def load_pickle_obj(filename="trained_classifier.pkl"):
-    """
-    Load the classifier from a file using pickle.
-    If the file does not exist, it raises an error.
-    Returns:
-        classifier (object): The loaded classifier object.
-    """
-
-    try:
-        with open(filename, "rb") as f:
-            obj = pickle.load(f)
-
-        if obj is None:
-            raise ValueError(f"File '{filename}' is empty or corrupted.")
-
-        print(f"📂 Classifier loaded from {filename}")
-        return obj
-
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(f"File '{filename}' not found.") from exc
+from utils.io_operations import PickleUtils
+from utils.numba_setup import njit, prange
 
 
 ## Random generation methods
@@ -694,7 +620,7 @@ class AdaBoost:
             print("✅ Cropped negatives from the feature evaluation matrix.\n")
 
         # Save the trained classifier to a file
-        save_pickle_obj(
+        PickleUtils.save_pickle_obj(
             filename="trained_classifier.pkl",
             obj=self.trained_classifier,
         )
@@ -715,7 +641,7 @@ class ClassifierScoreCheck:
         """
         self.feature_eval_matrix = feature_eval_matrix
         self.sample_labels = sample_labels
-        self.trained_classifier = load_pickle_obj(
+        self.trained_classifier = PickleUtils.load_pickle_obj(
             filename="_pickle_folder/trained_classifier.pkl"
         )
 
