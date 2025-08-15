@@ -324,7 +324,7 @@ def crop_negatives_numba(
     )
 
 
-class AdaBoost:
+class AdaBoostTrainer:
     """
     Optimized AdaBoost classifier using numpy.
     """
