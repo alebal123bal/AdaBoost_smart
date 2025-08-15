@@ -5,7 +5,8 @@ Test script for the AdaBoost implementation.
 import time
 import numpy as np
 
-from adaboost import AdaBoost, ClassifierScoreCheck, generate_random_data_numba
+from data.synthetic_data import SyntheticData
+from adaboost import AdaBoost, ClassifierScoreCheck
 
 if __name__ == "__main__":
     # Set the seed for reproducibility
@@ -27,8 +28,10 @@ if __name__ == "__main__":
     SAMPLE_LABELS = np.array([1, -1, -1, 1, 1])
 
     # Try a big dataset
-    FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = generate_random_data_numba(
-        size_x=2000, size_y=15000, bias_strenght=40
+    FEATURE_EVAL_MATRIX, SAMPLE_WEIGHTS, SAMPLE_LABELS = (
+        SyntheticData.generate_random_data_numba(
+            size_x=2000, size_y=15000, bias_strenght=40
+        )
     )
 
     print("Feature Evaluation Matrix:")
